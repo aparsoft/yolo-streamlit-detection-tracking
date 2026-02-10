@@ -32,7 +32,20 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # 3️⃣  Confidence slider ──────────────────────────────────────────────────
+    # 3️⃣  Model selector ─────────────────────────────────────────────────────
+    catalog = config.get_model_catalog(task)
+    model_label = st.selectbox(
+        "🧠 Model",
+        options=list(catalog.keys()),
+        index=0,
+        help="YOLO26 = fast CNN · RT-DETR = transformer (better on small objects) · World = open-vocab.",
+        key="model_select",
+    )
+    selected_model = catalog[model_label]
+
+    st.markdown("---")
+
+    # 4️⃣  Confidence slider ──────────────────────────────────────────────────
     confidence = (
         st.slider(
             "Model Confidence (%)",
@@ -48,8 +61,8 @@ st.title(config.APP_TITLE)
 st.markdown(f"*{config.APP_DESCRIPTION}*")
 
 if mode == config.MODE_IMAGE:
-    image_service.render(task, confidence)
+    image_service.render(task, confidence, selected_model)
 elif mode == config.MODE_VIDEO:
-    video_service.render(task, confidence)
+    video_service.render(task, confidence, selected_model)
 else:
     st.error("Please select a valid inference mode.")
