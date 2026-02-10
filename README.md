@@ -5,13 +5,13 @@
 **Real-time Object Detection · Segmentation · Pose Estimation · Tracking**
 **Powered by YOLOv8, YOLO World & Streamlit**
 
-[![Stars](https://img.shields.io/github/stars/CodingMantras/yolo-streamlit-detection-tracking?style=for-the-badge&logo=github)](https://github.com/CodingMantras/yolo-streamlit-detection-tracking/stargazers)
+[![Stars](https://img.shields.io/github/stars/CodingMantras/yolov8-streamlit-detection-tracking?style=for-the-badge&logo=github)](https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/stargazers)
 [![Python](https://img.shields.io/badge/Python-3.9+-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.40+-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io)
 [![Ultralytics](https://img.shields.io/badge/Ultralytics-8.3+-purple?style=for-the-badge)](https://ultralytics.com)
-[![License](https://img.shields.io/github/license/CodingMantras/yolo-streamlit-detection-tracking?style=for-the-badge)](LICENSE)
+[![License](https://img.shields.io/github/license/CodingMantras/yolov8-streamlit-detection-tracking?style=for-the-badge)](LICENSE)
 
-[Live Demo](https://yolov8-object-detection-and-tracking-app.streamlit.app/) · [Blog Series](https://medium.com/@mycodingmantras/building-a-real-time-object-detection-and-tracking-app-with-yolov8-and-streamlit-part-1-30c56f5eb956) · [Report Bug](https://github.com/CodingMantras/yolo-streamlit-detection-tracking/issues)
+[Live Demo](https://yolov8-object-detection-and-tracking-app.streamlit.app/) · [Blog Series](https://medium.com/@mycodingmantras/building-a-real-time-object-detection-and-tracking-app-with-yolov8-and-streamlit-part-1-30c56f5eb956) · [Report Bug](https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/issues)
 
 </div>
 
@@ -73,7 +73,7 @@
 
 | Home Page | Detection Result | Segmentation |
 |:---------:|:----------------:|:------------:|
-| <img src="https://github.com/CodingMantras/yolo-streamlit-detection-tracking/blob/master/assets/pic1.png" width="300"> | <img src="https://github.com/CodingMantras/yolo-streamlit-detection-tracking/blob/master/assets/pic3.png" width="300"> | <img src="https://github.com/CodingMantras/yolo-streamlit-detection-tracking/blob/master/assets/segmentation.png" width="300"> |
+| <img src="https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/blob/master/assets/pic1.png" width="300"> | <img src="https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/blob/master/assets/pic3.png" width="300"> | <img src="https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/blob/master/assets/segmentation.png" width="300"> |
 
 ---
 
@@ -89,8 +89,8 @@
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/CodingMantras/yolo-streamlit-detection-tracking.git
-cd yolo-streamlit-detection-tracking
+git clone https://github.com/CodingMantras/yolov8-streamlit-detection-tracking.git
+cd yolov8-streamlit-detection-tracking
 
 # 2. Create a virtual environment
 python -m venv venv
@@ -163,7 +163,7 @@ Drop `.mp4` files into the `videos/` directory. They appear automatically in the
 ## 🗂️ Project Structure
 
 ```
-yolo-streamlit-detection-tracking/
+yolov8-streamlit-detection-tracking/
 ├── app.py                # Main Streamlit application & routing
 ├── config.py             # Centralized configuration (paths, models, UI)
 ├── model_loader.py       # Model loading with @st.cache_resource
