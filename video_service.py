@@ -4,11 +4,10 @@ Video inference service — Stored videos, Webcam, RTSP & YouTube.
 Features
 --------
 * Object detection, segmentation, YOLO World v2 & pose estimation
-* ByteTrack / BoTSORT tracking with unique-object counting (enabled by default)
+* ByteTrack / BoTSORT tracking with per-box track IDs (class | conf | ID:N)
 * Local (per-frame) + Global (cumulative) tracking metrics
-* Skip-frames slider for faster inferencing of similar frames
-* Real-time per-class & total-object metrics in the sidebar
-* YOLO World v2 natural language text search in video streams
+* Skip-frames slider for faster inferencing
+* Multi-video simultaneous detection in side-by-side columns
 * Browser-based webcam via streamlit-webrtc
 """
 
@@ -23,7 +22,123 @@ import streamlit as st
 import yt_dlp
 
 import config
-from model_loader import get_model_for_task
+from model_loader import get_model_for_task, load_fresh_model
+
+
+# ── Track-ID colour palette (16 distinct BGR colours) ────────────────────────
+
+_TRACK_COLORS = [
+    (46, 204, 113),  # emerald
+    (52, 152, 219),  # peter river
+    (231, 76, 60),  # alizarin
+    (241, 196, 15),  # sun flower
+    (155, 89, 182),  # amethyst
+    (26, 188, 156),  # turquoise
+    (230, 126, 34),  # carrot
+    (52, 73, 94),  # wet asphalt
+    (22, 160, 133),  # green sea
+    (39, 174, 96),  # nephritis
+    (41, 128, 185),  # belize hole
+    (142, 68, 173),  # wisteria
+    (243, 156, 18),  # orange
+    (211, 84, 0),  # pumpkin
+    (192, 57, 43),  # pomegranate
+    (127, 140, 141),  # asbestos
+]
+
+
+def _color_for_track(track_id: int) -> tuple[int, int, int]:
+    """Return a distinct BGR colour for *track_id*."""
+    return _TRACK_COLORS[abs(track_id) % len(_TRACK_COLORS)]
+
+
+# ── Custom annotation with track IDs on bounding boxes ───────────────────────
+
+
+def _annotate_with_ids(
+    frame: np.ndarray,
+    result,
+    enable_tracking: bool,
+    font_scale: float = 0.50,
+    box_thickness: int = 2,
+) -> np.ndarray:
+    """Draw bounding boxes with ``class | conf% | ID:N`` labels.
+
+    For segmentation / pose tasks, masks / keypoints are rendered first
+    via ``result.plot(labels=False, boxes=False)`` then custom box
+    labels with track IDs are overlaid.
+    """
+    has_masks = getattr(result, "masks", None) is not None and len(result.masks)
+    has_kpts = getattr(result, "keypoints", None) is not None and len(result.keypoints)
+
+    if has_masks or has_kpts:
+        annotated = result.plot(labels=False, boxes=False, conf=False)
+    else:
+        annotated = frame.copy()
+
+    if result.boxes is None or len(result.boxes) == 0:
+        return annotated
+
+    names = result.names
+    boxes_xyxy = result.boxes.xyxy.cpu().numpy().astype(int)
+    classes = result.boxes.cls.cpu().numpy().astype(int)
+    confs = result.boxes.conf.cpu().numpy()
+
+    track_ids = None
+    if enable_tracking and result.boxes.id is not None:
+        track_ids = result.boxes.id.cpu().numpy().astype(int)
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+
+    for i, (box, cls_id, conf) in enumerate(zip(boxes_xyxy, classes, confs)):
+        x1, y1, x2, y2 = box
+        tid = track_ids[i] if track_ids is not None else None
+        color = _color_for_track(tid) if tid is not None else _color_for_track(cls_id)
+
+        # Bounding box
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, box_thickness)
+
+        # Label: "class | 87% | ID:5"
+        name = names[cls_id]
+        parts = [name, f"{conf:.0%}"]
+        if tid is not None:
+            parts.append(f"ID:{tid}")
+        label = " | ".join(parts)
+
+        (tw, th), baseline = cv2.getTextSize(label, font, font_scale, 1)
+        label_y = max(y1 - 6, th + 4)
+        cv2.rectangle(
+            annotated,
+            (x1, label_y - th - 4),
+            (x1 + tw + 6, label_y + baseline),
+            color,
+            -1,
+        )
+        cv2.putText(
+            annotated,
+            label,
+            (x1 + 2, label_y - 2),
+            font,
+            font_scale,
+            (255, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
+
+    return annotated
+
+
+# ── Frame → JPEG bytes (avoids Streamlit MediaFileHandler cache issue) ───────
+
+
+def _frame_to_bytes(frame: np.ndarray) -> bytes:
+    """Encode a BGR *frame* to JPEG bytes for ``st.image()``.
+
+    Sending raw bytes avoids Streamlit's internal temp-file caching,
+    which can cause ``MediaFileStorageError`` during fast video loops.
+    """
+    _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    return buf.tobytes()
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -56,12 +171,20 @@ def render(task: str, confidence: float) -> None:
         min_value=config.MIN_SKIP_FRAMES,
         max_value=config.MAX_SKIP_FRAMES,
         value=config.DEFAULT_SKIP_FRAMES,
-        help="Process every Nth frame. Higher = faster but less smooth. 1 = every frame.",
+        help="Process every Nth frame. Higher = faster but less smooth.",
         key="skip_frames",
     )
 
-    # Dispatch
-    _SOURCE_HANDLERS[source](model, confidence, enable_tracking, tracker, skip_frames)
+    # Dispatch — pass task & world_classes for multi-video model isolation
+    _SOURCE_HANDLERS[source](
+        model,
+        confidence,
+        enable_tracking,
+        tracker,
+        skip_frames,
+        task,
+        world_classes,
+    )
 
 
 # ── YOLO World helpers ───────────────────────────────────────────────────────
@@ -115,14 +238,7 @@ def _process_frame(
 ) -> tuple[np.ndarray, int, dict[str, int]]:
     """Run inference on a single frame.
 
-    Returns
-    -------
-    annotated : np.ndarray
-        Frame with drawn annotations.
-    frame_obj_count : int
-        Number of objects detected in this frame.
-    frame_class_counts : dict[str, int]
-        Per-class counts for this frame.
+    Returns ``(annotated_frame, object_count, per_class_counts)``.
     """
     h_orig, w_orig = frame.shape[:2]
     w = config.VIDEO_DISPLAY_WIDTH
@@ -155,9 +271,10 @@ def _process_frame(
                 name = names[int(cls_id)]
                 class_tracked.setdefault(name, set()).add(int(track_id))
 
-    annotated = result.plot()
+    # Custom annotation with track IDs on bounding boxes
+    annotated = _annotate_with_ids(frame, result, enable_tracking)
 
-    # Overlay local + global tracking counts
+    # Overlay local + global counts
     annotated = _draw_overlay(
         annotated,
         frame_obj_count,
@@ -269,7 +386,7 @@ class _LiveMetrics:
             self._global_classes_ph.markdown(global_str or "—")
 
 
-# ── Video-capture loop (shared by all sources) ───────────────────────────────
+# ── Single-video capture loop ────────────────────────────────────────────────
 
 
 def _run_video_loop(
@@ -292,7 +409,7 @@ def _run_video_loop(
     frame_num = 0
     processed = 0
     prev_time = time.time()
-    last_annotated = None
+    last_bytes: bytes | None = None
 
     try:
         while vid_cap.isOpened():
@@ -303,11 +420,8 @@ def _run_video_loop(
 
             # Skip frames for faster inference
             if frame_num % skip_frames != 0:
-                # Show last annotated frame if available (keeps display smooth)
-                if last_annotated is not None:
-                    st_frame.image(
-                        last_annotated, channels="BGR", use_container_width=True
-                    )
+                if last_bytes is not None:
+                    st_frame.image(last_bytes, width="stretch")
                 continue
 
             processed += 1
@@ -322,8 +436,8 @@ def _run_video_loop(
                 class_tracked,
             )
 
-            last_annotated = annotated
-            st_frame.image(annotated, channels="BGR", use_container_width=True)
+            last_bytes = _frame_to_bytes(annotated)
+            st_frame.image(last_bytes, width="stretch")
 
             now = time.time()
             fps = 1.0 / max(now - prev_time, 1e-6)
@@ -359,6 +473,107 @@ def _run_video_loop(
         st.success(f"✅ {' · '.join(summary_parts)}")
 
 
+# ── Multi-video simultaneous loop ────────────────────────────────────────────
+
+
+def _run_multi_video_loop(
+    vid_names: list[str],
+    confidence: float,
+    enable_tracking: bool,
+    tracker: str | None,
+    skip_frames: int,
+    task: str,
+    world_classes: list[str] | None,
+) -> None:
+    """Process multiple videos simultaneously in side-by-side columns.
+
+    Each video gets a **fresh model** instance so that ByteTrack /
+    BoTSORT tracking state is isolated per video.
+    """
+    n = len(vid_names)
+
+    # Fresh model per video — tracking state isolation
+    models = [load_fresh_model(task, world_classes) for _ in range(n)]
+
+    cols = st.columns(n)
+    placeholders = []
+    for i, name in enumerate(vid_names):
+        with cols[i]:
+            st.markdown(f"**{name}**")
+            placeholders.append(st.empty())
+
+    captures = [cv2.VideoCapture(str(config.VIDEOS_DICT[nm])) for nm in vid_names]
+    tracked_sets: list[set[int]] = [set() for _ in range(n)]
+    class_tracked_dicts: list[dict[str, set[int]]] = [
+        defaultdict(set) for _ in range(n)
+    ]
+    frame_nums = [0] * n
+    last_bytes_list: list[bytes | None] = [None] * n
+    active = [cap.isOpened() for cap in captures]
+
+    # Sidebar compact metrics
+    with st.sidebar:
+        st.subheader("📈 Multi-Video Metrics")
+        metric_phs = [st.empty() for _ in vid_names]
+
+    prev_time = time.time()
+
+    try:
+        while any(active):
+            for i in range(n):
+                if not active[i]:
+                    continue
+
+                ok, frame = captures[i].read()
+                if not ok:
+                    active[i] = False
+                    continue
+
+                frame_nums[i] += 1
+
+                if frame_nums[i] % skip_frames != 0:
+                    if last_bytes_list[i] is not None:
+                        placeholders[i].image(
+                            last_bytes_list[i],
+                            width="stretch",
+                        )
+                    continue
+
+                annotated, obj_count, cls_counts = _process_frame(
+                    models[i],
+                    frame,
+                    confidence,
+                    enable_tracking,
+                    tracker,
+                    tracked_sets[i],
+                    class_tracked_dicts[i],
+                )
+
+                last_bytes_list[i] = _frame_to_bytes(annotated)
+                placeholders[i].image(last_bytes_list[i], width="stretch")
+
+                now = time.time()
+                fps = 1.0 / max(now - prev_time, 1e-6)
+                prev_time = now
+
+                metric_phs[i].markdown(
+                    f"**{vid_names[i]}** — Frame {frame_nums[i]} · "
+                    f"{obj_count} obj · {len(tracked_sets[i])} tracked · "
+                    f"{fps:.1f} FPS"
+                )
+    finally:
+        for cap in captures:
+            cap.release()
+
+    # Per-video summary
+    for i, name in enumerate(vid_names):
+        t = tracked_sets[i]
+        st.success(
+            f"✅ **{name}**: {frame_nums[i]} frames"
+            + (f" — **{len(t)}** unique objects" if t else "")
+        )
+
+
 # ── Source handlers ──────────────────────────────────────────────────────────
 
 
@@ -367,27 +582,52 @@ def _play_stored_video(
     confidence: float,
     enable_tracking: bool,
     tracker: str | None,
-    skip_frames: int = 1,
+    skip_frames: int,
+    task: str,
+    world_classes: list[str] | None,
 ) -> None:
     if not config.VIDEOS_DICT:
         st.warning("No videos found in the `videos/` directory.")
         return
 
-    vid_name = st.sidebar.selectbox("Choose a video", list(config.VIDEOS_DICT.keys()))
-    vid_path = config.VIDEOS_DICT[vid_name]
+    vid_names = st.sidebar.multiselect(
+        "Choose video(s)",
+        list(config.VIDEOS_DICT.keys()),
+        default=[list(config.VIDEOS_DICT.keys())[0]] if config.VIDEOS_DICT else [],
+        help="Select multiple videos for simultaneous detection.",
+    )
 
-    with open(vid_path, "rb") as f:
-        st.video(f.read())
+    if not vid_names:
+        st.info("Select at least one video from the sidebar.")
+        return
+
+    # Preview selected videos
+    preview_cols = st.columns(min(len(vid_names), 3))
+    for i, name in enumerate(vid_names):
+        with preview_cols[i % len(preview_cols)]:
+            with open(config.VIDEOS_DICT[name], "rb") as f:
+                st.video(f.read())
 
     if st.sidebar.button("🚀 Detect Video Objects", type="primary"):
-        _run_video_loop(
-            cv2.VideoCapture(str(vid_path)),
-            model,
-            confidence,
-            enable_tracking,
-            tracker,
-            skip_frames,
-        )
+        if len(vid_names) == 1:
+            _run_video_loop(
+                cv2.VideoCapture(str(config.VIDEOS_DICT[vid_names[0]])),
+                model,
+                confidence,
+                enable_tracking,
+                tracker,
+                skip_frames,
+            )
+        else:
+            _run_multi_video_loop(
+                vid_names,
+                confidence,
+                enable_tracking,
+                tracker,
+                skip_frames,
+                task,
+                world_classes,
+            )
 
 
 def _play_webcam(
@@ -395,7 +635,9 @@ def _play_webcam(
     confidence: float,
     enable_tracking: bool,
     tracker: str | None,
-    skip_frames: int = 1,
+    skip_frames: int,
+    task: str,
+    world_classes: list[str] | None,
 ) -> None:
     """Browser-based webcam via streamlit-webrtc (works locally + cloud)."""
     try:
@@ -413,7 +655,6 @@ def _play_webcam(
         "Your browser will ask for camera permission — please allow it."
     )
 
-    # We need to create a processor class that captures detection state
     tracked_ids_global: set[int] = set()
     class_tracked_global: dict[str, set[int]] = defaultdict(set)
 
@@ -464,7 +705,7 @@ def _play_webcam(
                         name = names[int(cls_id)]
                         class_tracked_global.setdefault(name, set()).add(int(track_id))
 
-            annotated = result.plot()
+            annotated = _annotate_with_ids(img, result, enable_tracking)
             annotated = _draw_overlay(
                 annotated,
                 len(result.boxes) if result.boxes is not None else 0,
@@ -488,7 +729,9 @@ def _play_rtsp(
     confidence: float,
     enable_tracking: bool,
     tracker: str | None,
-    skip_frames: int = 1,
+    skip_frames: int,
+    task: str,
+    world_classes: list[str] | None,
 ) -> None:
     url = st.sidebar.text_input(
         "RTSP Stream URL",
@@ -513,7 +756,9 @@ def _play_youtube(
     confidence: float,
     enable_tracking: bool,
     tracker: str | None,
-    skip_frames: int = 1,
+    skip_frames: int,
+    task: str,
+    world_classes: list[str] | None,
 ) -> None:
     url = st.sidebar.text_input(
         "YouTube URL", placeholder="https://www.youtube.com/watch?v=..."
