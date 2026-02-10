@@ -17,7 +17,7 @@ from model_loader import get_model_for_task
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
-def render(task: str, confidence: float) -> None:
+def render(task: str, confidence: float, selected_model: str | None = None) -> None:
     """Render the full image-inference page for the chosen *task*."""
     st.header(f"📷 Image · {task}")
 
@@ -28,7 +28,7 @@ def render(task: str, confidence: float) -> None:
         if not world_classes:
             return
 
-    model = get_model_for_task(task, world_classes)
+    model = get_model_for_task(task, world_classes, model_name=selected_model)
     if model is None:
         return
 
