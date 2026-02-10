@@ -143,3 +143,5 @@ dmypy.json
 .pyre/
 
 auto_commit.py
+*.pt
+*.ts
