@@ -144,7 +144,7 @@ def _frame_to_bytes(frame: np.ndarray) -> bytes:
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
-def render(task: str, confidence: float) -> None:
+def render(task: str, confidence: float, selected_model: str | None = None) -> None:
     """Render the full video-inference page for the chosen *task*."""
     st.header(f"🎬 Video · {task}")
 
@@ -155,7 +155,7 @@ def render(task: str, confidence: float) -> None:
         if not world_classes:
             return
 
-    model = get_model_for_task(task, world_classes)
+    model = get_model_for_task(task, world_classes, model_name=selected_model)
     if model is None:
         return
 
@@ -175,7 +175,7 @@ def render(task: str, confidence: float) -> None:
         key="skip_frames",
     )
 
-    # Dispatch — pass task & world_classes for multi-video model isolation
+    # Dispatch — pass task, world_classes & selected_model for multi-video isolation
     _SOURCE_HANDLERS[source](
         model,
         confidence,
@@ -184,6 +184,7 @@ def render(task: str, confidence: float) -> None:
         skip_frames,
         task,
         world_classes,
+        selected_model,
     )
 
 
@@ -484,6 +485,7 @@ def _run_multi_video_loop(
     skip_frames: int,
     task: str,
     world_classes: list[str] | None,
+    selected_model: str | None = None,
 ) -> None:
     """Process multiple videos simultaneously in side-by-side columns.
 
@@ -493,7 +495,10 @@ def _run_multi_video_loop(
     n = len(vid_names)
 
     # Fresh model per video — tracking state isolation
-    models = [load_fresh_model(task, world_classes) for _ in range(n)]
+    models = [
+        load_fresh_model(task, world_classes, model_name=selected_model)
+        for _ in range(n)
+    ]
 
     cols = st.columns(n)
     placeholders = []
@@ -585,6 +590,7 @@ def _play_stored_video(
     skip_frames: int,
     task: str,
     world_classes: list[str] | None,
+    selected_model: str | None = None,
 ) -> None:
     if not config.VIDEOS_DICT:
         st.warning("No videos found in the `videos/` directory.")
@@ -627,6 +633,7 @@ def _play_stored_video(
                 skip_frames,
                 task,
                 world_classes,
+                selected_model,
             )
 
 
@@ -638,6 +645,7 @@ def _play_webcam(
     skip_frames: int,
     task: str,
     world_classes: list[str] | None,
+    selected_model: str | None = None,
 ) -> None:
     """Browser-based webcam via streamlit-webrtc (works locally + cloud)."""
     try:
@@ -732,6 +740,7 @@ def _play_rtsp(
     skip_frames: int,
     task: str,
     world_classes: list[str] | None,
+    selected_model: str | None = None,
 ) -> None:
     url = st.sidebar.text_input(
         "RTSP Stream URL",
@@ -759,6 +768,7 @@ def _play_youtube(
     skip_frames: int,
     task: str,
     world_classes: list[str] | None,
+    selected_model: str | None = None,
 ) -> None:
     url = st.sidebar.text_input(
         "YouTube URL", placeholder="https://www.youtube.com/watch?v=..."
