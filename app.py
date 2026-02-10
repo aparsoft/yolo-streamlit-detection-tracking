@@ -2,7 +2,7 @@
 YOLO Vision Studio — Main Application
 ======================================
 Real-time Object Detection, Segmentation, Pose Estimation & Tracking
-powered by YOLOv8, YOLO World and Streamlit.
+powered by YOLO26, YOLO World v2 and Streamlit.
 """
 
 import streamlit as st
