@@ -99,11 +99,22 @@ DEFAULT_IMAGE = IMAGES_DIR / "office_4.jpg"
 DEFAULT_DETECT_IMAGE = IMAGES_DIR / "office_4_detected.jpg"
 
 # ─── Video Catalog ───────────────────────────────────────────────────────────
-VIDEOS_DICT = (
-    {name.stem: name for name in sorted(VIDEOS_DIR.glob("*.mp4"))}
-    if VIDEOS_DIR.exists()
-    else {}
-)
+_VIDEO_EXTENSIONS = ("*.mp4", "*.avi", "*.mkv", "*.mov", "*.wmv", "*.webm")
+
+
+def get_videos_dict() -> dict[str, Path]:
+    """Scan ``videos/`` directory each time so newly added files appear."""
+    if not VIDEOS_DIR.exists():
+        return {}
+    vids: dict[str, Path] = {}
+    for ext in _VIDEO_EXTENSIONS:
+        for p in sorted(VIDEOS_DIR.glob(ext)):
+            vids[p.stem] = p
+    return dict(sorted(vids.items()))
+
+
+# Kept for backward compat — but prefer get_videos_dict()
+VIDEOS_DICT = get_videos_dict()
 
 # ─── Inference Defaults ──────────────────────────────────────────────────────
 DEFAULT_CONFIDENCE = 0.40
