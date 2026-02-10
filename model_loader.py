@@ -4,7 +4,7 @@ Models are loaded once and reused across reruns.
 """
 
 import streamlit as st
-from ultralytics import YOLO
+from ultralytics import YOLO, YOLOWorld
 
 import config
 
@@ -21,17 +21,19 @@ def load_model(model_name: str) -> YOLO:
 
 
 @st.cache_resource
-def load_world_model(model_name: str) -> YOLO:
-    """Load a YOLO World model for open-vocabulary detection.
+def load_world_model(model_name: str) -> YOLOWorld:
+    """Load a YOLO World v2 model for open-vocabulary detection.
 
+    Uses the ``YOLOWorld`` class which supports natural language
+    text prompts like "person in black", "red car", etc.
     The model is cached, but ``set_classes()`` must be called
     before each inference because the class list can change.
     """
     path = config.resolve_model_path(model_name)
-    return YOLO(path)
+    return YOLOWorld(path)
 
 
-def get_model_for_task(task: str, world_classes: list[str] | None = None) -> YOLO | None:
+def get_model_for_task(task: str, world_classes: list[str] | None = None) -> YOLO | YOLOWorld | None:
     """Return the appropriate model for *task*.
 
     Parameters
@@ -43,7 +45,7 @@ def get_model_for_task(task: str, world_classes: list[str] | None = None) -> YOL
 
     Returns
     -------
-    YOLO | None
+    YOLO | YOLOWorld | None
         The loaded model, or ``None`` on error.
     """
     try:
