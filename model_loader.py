@@ -64,3 +64,25 @@ def get_model_for_task(task: str, world_classes: list[str] | None = None) -> YOL
         st.error(f"❌ Failed to load model for **{task}**: {exc}")
         return None
     return None
+
+
+def load_fresh_model(task: str, world_classes: list[str] | None = None) -> YOLO | YOLOWorld:
+    """Load a **fresh** (uncached) model instance.
+
+    Used by multi-video mode so each video gets isolated tracking
+    state (ByteTrack / BoTSORT state lives on the model).
+    """
+    _MODEL_MAP = {
+        config.TASK_DETECT: config.DETECTION_MODEL,
+        config.TASK_SEGMENT: config.SEGMENTATION_MODEL,
+        config.TASK_POSE: config.POSE_MODEL,
+    }
+
+    if task == config.TASK_WORLD:
+        m = YOLOWorld(config.resolve_model_path(config.YOLO_WORLD_MODEL))
+        if world_classes:
+            m.set_classes(world_classes)
+        return m
+
+    name = _MODEL_MAP.get(task, config.DETECTION_MODEL)
+    return YOLO(config.resolve_model_path(name))
