@@ -3,7 +3,7 @@
 # 🔬 YOLO Vision Studio
 
 **Real-time Object Detection · Segmentation · Pose Estimation · Tracking**
-**Powered by YOLOv8, YOLO World & Streamlit**
+**Powered by YOLO26, YOLOE-26 & Streamlit**
 
 [![Stars](https://img.shields.io/github/stars/CodingMantras/yolov8-streamlit-detection-tracking?style=for-the-badge&logo=github)](https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/stargazers)
 [![Python](https://img.shields.io/badge/Python-3.9+-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
@@ -23,12 +23,12 @@
 
 | Feature | v1.0 | v2.0 |
 |---------|------|------|
-| Object Detection | YOLOv8n | YOLOv8n + YOLO World (text prompts) |
-| Segmentation | YOLOv8n-seg | YOLOv8n-seg (improved UI) |
-| Pose Estimation | ❌ | ✅ YOLOv8n-pose |
+| Object Detection | YOLOv8n | YOLO26n (NMS-free, 43% faster CPU) |
+| Segmentation | YOLOv8n-seg | YOLO26n-seg (multi-scale proto + semantic loss) |
+| Pose Estimation | ❌ | ✅ YOLO26n-pose (RLE-based keypoints) |
+| Open-Vocabulary | ❌ | ✅ YOLOE-26 (text-prompt detection + segmentation) |
 | Tracking | Basic | ByteTrack + BoTSORT with unique-object counting |
 | Object Counting | ❌ | ✅ Real-time per-class & total counts |
-| YOLO World | ❌ | ✅ Open-vocabulary detection via text prompt |
 | Architecture | Monolithic | Modular service-based design |
 | Video Metrics | ❌ | ✅ Live FPS, counts & tracking overlay |
 | Codebase | `helper.py + settings.py` | `config · model_loader · image_service · video_service` |
@@ -38,10 +38,10 @@
 ## ✨ Features
 
 ### 📷 Image Inference
-- **Object Detection** — Detect 80+ COCO classes with YOLOv8
-- **YOLO World (Text Prompt)** — Type any object class and detect it instantly using open-vocabulary detection (YOLOv8l-worldv2)
-- **Instance Segmentation** — Pixel-level object segmentation
-- **Pose Estimation** — Human body keypoint and skeleton detection
+- **Object Detection** — Detect 80+ COCO classes with YOLO26 (NMS-free, edge-optimized)
+- **YOLOE-26 (Text Prompt)** — Type any object class and detect + segment it instantly using open-vocabulary detection
+- **Instance Segmentation** — Pixel-level object segmentation with multi-scale proto modules
+- **Pose Estimation** — Human body keypoint and skeleton detection with RLE precision
 - Per-class metrics, confidence scores and detailed results table
 
 ### 🎬 Video Inference
@@ -49,7 +49,7 @@
 - **Real-time Tracking**: ByteTrack and BoTSORT algorithms
 - **Object Counting**: Live per-class and total object counts on every frame
 - **Unique Object Tracking**: Track and count unique objects across frames
-- **YOLO World in Video**: Text-prompt search in video streams
+- **YOLOE-26 in Video**: Text-prompt open-vocabulary search in video streams
 - **Live Metrics**: FPS counter, frame number, and class breakdowns in sidebar
 - **Count Overlay**: On-frame object count badge
 
@@ -103,15 +103,21 @@ pip install -r requirements.txt
 
 ### Download Model Weights
 
-The default detection (`yolov8n.pt`) and segmentation (`yolov8n-seg.pt`) weights ship in the `weights/` directory. Additional models (**YOLO World**, **Pose**) are auto-downloaded by Ultralytics on first use.
+The default detection and segmentation weights are auto-downloaded by Ultralytics on first use. All YOLO26 models (detection, segmentation, pose) and YOLOE-26 (open-vocabulary) are fetched automatically.
 
 To pre-download manually:
 
 ```bash
-# Pose estimation
-wget -P weights/ https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8n-pose.pt
+# Detection
+wget -P weights/ https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26n.pt
 
-# YOLO World v2 (large) — auto-downloads if not present
+# Segmentation
+wget -P weights/ https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26n-seg.pt
+
+# Pose estimation
+wget -P weights/ https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26n-pose.pt
+
+# YOLOE-26 open-vocabulary (larger, auto-downloads if not present)
 # No manual action needed; runs on first inference
 ```
 
@@ -131,9 +137,9 @@ The app opens at **http://localhost:8501**.
 
 1. **Inference Mode** — Choose between 📷 *Image Inference* or 🎬 *Video Inference*
 2. **Task** — Select one of:
-   - **Detection** — Standard YOLOv8 object detection
+   - **Object Detection** — Standard YOLO26 object detection (NMS-free, end-to-end)
    - **Segmentation** — Instance segmentation with pixel masks
-   - **YOLO World (Text Prompt)** — Open-vocabulary detection (type any class!)
+   - **YOLOE-26 (Text Prompt)** — Open-vocabulary detection (type any class!)
    - **Pose Estimation** — Human body keypoint detection
 3. **Model Confidence** — Adjust the confidence threshold (10–100%)
 
@@ -142,7 +148,7 @@ The app opens at **http://localhost:8501**.
 1. Select **📷 Image Inference** mode
 2. Choose a task (Detection, Segmentation, YOLO World, or Pose)
 3. Upload an image or use the default
-4. For **YOLO World**: type comma-separated class names (e.g., `person, backpack, laptop`)
+4. For **YOLOE-26**: type comma-separated class names (e.g., `person, backpack, laptop`)
 5. Click **🚀 Run** to see results with per-class metrics
 
 ### Video Inference
@@ -151,7 +157,7 @@ The app opens at **http://localhost:8501**.
 2. Choose a task
 3. Pick a video source: **Stored Video**, **Webcam**, **RTSP**, or **YouTube**
 4. Enable **Object Tracking** (ByteTrack or BoTSORT) for unique-object counting
-5. For **YOLO World**: enter text classes to search for in the video
+5. For **YOLOE-26**: enter text classes to search for in the video
 6. Click **🚀 Detect** — live metrics appear in the sidebar
 
 ### Adding Your Own Videos
@@ -196,17 +202,17 @@ All configuration lives in `config.py`. Key settings:
 
 ```python
 # Models — change to larger variants for better accuracy
-DETECTION_MODEL    = "yolov8n.pt"        # or yolov8s.pt, yolov8m.pt, yolov8l.pt
-SEGMENTATION_MODEL = "yolov8n-seg.pt"    # or yolov8s-seg.pt
-YOLO_WORLD_MODEL   = "yolov8l-worldv2.pt"
-POSE_MODEL         = "yolov8n-pose.pt"   # or yolov8s-pose.pt
+DETECTION_MODEL    = "yolo26n.pt"        # or yolo26s.pt, yolo26m.pt, yolo26l.pt
+SEGMENTATION_MODEL = "yolo26n-seg.pt"    # or yolo26s-seg.pt
+YOLO_WORLD_MODEL   = "yoloe-26l-seg.pt"  # open-vocabulary (text prompts)
+POSE_MODEL         = "yolo26n-pose.pt"   # or yolo26s-pose.pt
 
 # Inference defaults
 DEFAULT_CONFIDENCE = 0.40
 DEFAULT_IOU        = 0.50
 VIDEO_DISPLAY_WIDTH = 720
 
-# YOLO World default classes
+# YOLOE-26 default classes
 DEFAULT_WORLD_CLASSES = "person, car, dog, cat, chair, table, laptop, phone"
 ```
 
@@ -255,8 +261,8 @@ Contributions are welcome! Here's how:
 
 ## 📚 Resources
 
-- [Ultralytics YOLOv8 Documentation](https://docs.ultralytics.com/)
-- [YOLO World Paper](https://arxiv.org/abs/2401.17270)
+- [Ultralytics YOLO26 Documentation](https://docs.ultralytics.com/models/yolo26/)
+- [YOLOE-26 Open-Vocabulary Docs](https://docs.ultralytics.com/models/yoloe/)
 - [Streamlit Documentation](https://docs.streamlit.io/)
 - [ByteTrack Paper](https://arxiv.org/abs/2110.06864)
 - [Blog Series — Building this App](https://medium.com/@mycodingmantras/building-a-real-time-object-detection-and-tracking-app-with-yolov8-and-streamlit-part-1-30c56f5eb956)
@@ -269,7 +275,7 @@ This project is open-source and available for educational and research purposes.
 
 ## 🙏 Acknowledgements
 
-- [Ultralytics](https://github.com/ultralytics/ultralytics) for YOLOv8 and YOLO World
+- [Ultralytics](https://github.com/ultralytics/ultralytics) for YOLO26 and YOLOE-26
 - [Streamlit](https://github.com/streamlit/streamlit) for the web framework
 - All **400+** stargazers for the love and support!
 
