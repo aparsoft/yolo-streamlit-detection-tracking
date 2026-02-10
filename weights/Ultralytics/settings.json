@@ -1,0 +1,21 @@
+{
+  "settings_version": "0.0.6",
+  "datasets_dir": "/home/ram/projects/datasets",
+  "weights_dir": "/home/ram/projects/yolo-streamlit-detection-tracking/weights",
+  "runs_dir": "/home/ram/projects/yolo-streamlit-detection-tracking/runs",
+  "uuid": "57d054c02901d201152a24bdda5dd9777c256d2423e20d99a5b3bb77b38d238a",
+  "sync": true,
+  "api_key": "",
+  "openai_api_key": "",
+  "clearml": true,
+  "comet": true,
+  "dvc": true,
+  "hub": true,
+  "mlflow": true,
+  "neptune": true,
+  "raytune": true,
+  "tensorboard": false,
+  "wandb": false,
+  "vscode_msg": true,
+  "openvino_msg": true
+}
