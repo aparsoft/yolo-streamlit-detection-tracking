@@ -71,7 +71,7 @@ def _world_class_input() -> list[str] | None:
     text = st.text_area(
         "🔍 Enter object classes to detect (comma-separated)",
         value=config.DEFAULT_WORLD_CLASSES,
-        help="YOLO World performs open-vocabulary detection based on your text prompt.",
+        help="YOLOE-26 performs open-vocabulary detection + segmentation based on your text prompt.",
     )
     classes = [c.strip() for c in text.split(",") if c.strip()]
     if classes:
