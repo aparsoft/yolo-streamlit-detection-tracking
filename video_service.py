@@ -479,6 +479,7 @@ def _run_video_loop(
 
 def _run_multi_video_loop(
     vid_names: list[str],
+    videos: dict[str, object],
     confidence: float,
     enable_tracking: bool,
     tracker: str | None,
@@ -493,6 +494,7 @@ def _run_multi_video_loop(
     BoTSORT tracking state is isolated per video.
     """
     n = len(vid_names)
+    _COLS_PER_ROW = 3
 
     # Fresh model per video — tracking state isolation
     models = [
@@ -500,14 +502,17 @@ def _run_multi_video_loop(
         for _ in range(n)
     ]
 
-    cols = st.columns(n)
-    placeholders = []
-    for i, name in enumerate(vid_names):
-        with cols[i]:
-            st.markdown(f"**{name}**")
-            placeholders.append(st.empty())
+    # Build placeholders in a 3-per-row grid
+    placeholders: list[st.delta_generator.DeltaGenerator] = []
+    for row_start in range(0, n, _COLS_PER_ROW):
+        row_names = vid_names[row_start : row_start + _COLS_PER_ROW]
+        cols = st.columns(_COLS_PER_ROW)
+        for j, name in enumerate(row_names):
+            with cols[j]:
+                st.markdown(f"**{name}**")
+                placeholders.append(st.empty())
 
-    captures = [cv2.VideoCapture(str(config.VIDEOS_DICT[nm])) for nm in vid_names]
+    captures = [cv2.VideoCapture(str(videos[nm])) for nm in vid_names]
     tracked_sets: list[set[int]] = [set() for _ in range(n)]
     class_tracked_dicts: list[dict[str, set[int]]] = [
         defaultdict(set) for _ in range(n)
@@ -592,14 +597,17 @@ def _play_stored_video(
     world_classes: list[str] | None,
     selected_model: str | None = None,
 ) -> None:
-    if not config.VIDEOS_DICT:
+    # Scan videos/ on every run so newly added files appear immediately
+    videos = config.get_videos_dict()
+
+    if not videos:
         st.warning("No videos found in the `videos/` directory.")
         return
 
     vid_names = st.sidebar.multiselect(
         "Choose video(s)",
-        list(config.VIDEOS_DICT.keys()),
-        default=[list(config.VIDEOS_DICT.keys())[0]] if config.VIDEOS_DICT else [],
+        list(videos.keys()),
+        default=[list(videos.keys())[0]],
         help="Select multiple videos for simultaneous detection.",
     )
 
@@ -607,17 +615,20 @@ def _play_stored_video(
         st.info("Select at least one video from the sidebar.")
         return
 
-    # Preview selected videos
-    preview_cols = st.columns(min(len(vid_names), 3))
-    for i, name in enumerate(vid_names):
-        with preview_cols[i % len(preview_cols)]:
-            with open(config.VIDEOS_DICT[name], "rb") as f:
-                st.video(f.read())
+    # ── Preview selected videos in a 3-per-row grid ──────────────
+    _COLS_PER_ROW = 3
+    for row_start in range(0, len(vid_names), _COLS_PER_ROW):
+        row_slice = vid_names[row_start : row_start + _COLS_PER_ROW]
+        cols = st.columns(_COLS_PER_ROW)
+        for j, name in enumerate(row_slice):
+            with cols[j]:
+                st.markdown(f"**{name}**")
+                st.video(str(videos[name]))
 
     if st.sidebar.button("🚀 Detect Video Objects", type="primary"):
         if len(vid_names) == 1:
             _run_video_loop(
-                cv2.VideoCapture(str(config.VIDEOS_DICT[vid_names[0]])),
+                cv2.VideoCapture(str(videos[vid_names[0]])),
                 model,
                 confidence,
                 enable_tracking,
@@ -627,6 +638,7 @@ def _play_stored_video(
         else:
             _run_multi_video_loop(
                 vid_names,
+                videos,
                 confidence,
                 enable_tracking,
                 tracker,
