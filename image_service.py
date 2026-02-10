@@ -67,11 +67,18 @@ def render(task: str, confidence: float) -> None:
 
 
 def _world_class_input() -> list[str] | None:
-    """Show a text-area for the user to type object classes."""
+    """Show a text-area for the user to type object classes / descriptive prompts."""
+    st.markdown(
+        "💡 **Tip**: YOLO World v2 supports natural language prompts! "
+        "Try descriptive phrases like `person in black`, `red car`, `wooden chair`."
+    )
     text = st.text_area(
-        "🔍 Enter object classes to detect (comma-separated)",
+        "🔍 Enter object classes or descriptions (comma-separated)",
         value=config.DEFAULT_WORLD_CLASSES,
-        help="YOLOE-26 performs open-vocabulary detection + segmentation based on your text prompt.",
+        help=(
+            "YOLO World v2 performs open-vocabulary detection based on your text prompt. "
+            "You can use simple class names OR descriptive phrases."
+        ),
     )
     classes = [c.strip() for c in text.split(",") if c.strip()]
     if classes:
