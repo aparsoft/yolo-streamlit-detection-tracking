@@ -1,110 +1,55 @@
-# Python In-built packages
-from pathlib import Path
-import PIL
+"""
+YOLO Vision Studio — Main Application
+======================================
+Real-time Object Detection, Segmentation, Pose Estimation & Tracking
+powered by YOLOv8, YOLO World and Streamlit.
+"""
 
-# External packages
 import streamlit as st
+import config
+import image_service
+import video_service
 
-# Local Modules
-import settings
-import helper
-
-# Setting page layout
+# ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Object Detection using YOLOv8",
-    page_icon="🤖",
+    page_title=config.APP_TITLE,
+    page_icon=config.APP_ICON,
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# Main page heading
-st.title("Object Detection And Tracking using YOLOv8")
+# ── Sidebar ───────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.title(f"{config.APP_ICON} {config.APP_TITLE}")
+    st.caption(f"v{config.APP_VERSION}")
+    st.markdown("---")
 
-# Sidebar
-st.sidebar.header("ML Model Config")
+    # 1️⃣  Inference mode ─────────────────────────────────────────────────────
+    mode = st.radio("Inference Mode", config.MODES_LIST, key="mode")
 
-# Model Options
-model_type = st.sidebar.radio(
-    "Select Task", ['Detection', 'Segmentation'])
+    # 2️⃣  Task selection ─────────────────────────────────────────────────────
+    task = st.radio("Task", config.TASKS_LIST, key="task")
 
-confidence = float(st.sidebar.slider(
-    "Select Model Confidence", 25, 100, 40)) / 100
+    st.markdown("---")
 
-# Selecting Detection Or Segmentation
-if model_type == 'Detection':
-    model_path = Path(settings.DETECTION_MODEL)
-elif model_type == 'Segmentation':
-    model_path = Path(settings.SEGMENTATION_MODEL)
+    # 3️⃣  Confidence slider ──────────────────────────────────────────────────
+    confidence = (
+        st.slider(
+            "Model Confidence (%)",
+            min_value=config.MIN_CONFIDENCE,
+            max_value=config.MAX_CONFIDENCE,
+            value=int(config.DEFAULT_CONFIDENCE * 100),
+        )
+        / 100.0
+    )
 
-# Load Pre-trained ML Model
-try:
-    model = helper.load_model(model_path)
-except Exception as ex:
-    st.error(f"Unable to load model. Check the specified path: {model_path}")
-    st.error(ex)
+# ── Main content ──────────────────────────────────────────────────────────────
+st.title(config.APP_TITLE)
+st.markdown(f"*{config.APP_DESCRIPTION}*")
 
-st.sidebar.header("Image/Video Config")
-source_radio = st.sidebar.radio(
-    "Select Source", settings.SOURCES_LIST)
-
-source_img = None
-# If image is selected
-if source_radio == settings.IMAGE:
-    source_img = st.sidebar.file_uploader(
-        "Choose an image...", type=("jpg", "jpeg", "png", 'bmp', 'webp'))
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        try:
-            if source_img is None:
-                default_image_path = str(settings.DEFAULT_IMAGE)
-                default_image = PIL.Image.open(default_image_path)
-                st.image(default_image_path, caption="Default Image",
-                         use_column_width=True)
-            else:
-                uploaded_image = PIL.Image.open(source_img)
-                st.image(source_img, caption="Uploaded Image",
-                         use_column_width=True)
-        except Exception as ex:
-            st.error("Error occurred while opening the image.")
-            st.error(ex)
-
-    with col2:
-        if source_img is None:
-            default_detected_image_path = str(settings.DEFAULT_DETECT_IMAGE)
-            default_detected_image = PIL.Image.open(
-                default_detected_image_path)
-            st.image(default_detected_image_path, caption='Detected Image',
-                     use_column_width=True)
-        else:
-            if st.sidebar.button('Detect Objects'):
-                res = model.predict(uploaded_image,
-                                    conf=confidence
-                                    )
-                boxes = res[0].boxes
-                res_plotted = res[0].plot()[:, :, ::-1]
-                st.image(res_plotted, caption='Detected Image',
-                         use_column_width=True)
-                try:
-                    with st.expander("Detection Results"):
-                        for box in boxes:
-                            st.write(box.data)
-                except Exception as ex:
-                    # st.write(ex)
-                    st.write("No image is uploaded yet!")
-
-elif source_radio == settings.VIDEO:
-    helper.play_stored_video(confidence, model)
-
-elif source_radio == settings.WEBCAM:
-    helper.play_webcam(confidence, model)
-
-elif source_radio == settings.RTSP:
-    helper.play_rtsp_stream(confidence, model)
-
-elif source_radio == settings.YOUTUBE:
-    helper.play_youtube_video(confidence, model)
-
+if mode == config.MODE_IMAGE:
+    image_service.render(task, confidence)
+elif mode == config.MODE_VIDEO:
+    video_service.render(task, confidence)
 else:
-    st.error("Please select a valid source type!")
+    st.error("Please select a valid inference mode.")
