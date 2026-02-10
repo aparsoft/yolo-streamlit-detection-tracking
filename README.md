@@ -1,141 +1,284 @@
-# <span style="color:deepskyblue"> Real-time Object Detection and Tracking with YOLOv8 & Streamlit </span>
+<div align="center">
 
-This repository is an extensive open-source project showcasing the seamless integration of **object detection and tracking** using **YOLOv8** (object detection algorithm), along with **Streamlit** (a popular Python web application framework for creating interactive web apps). The project offers a user-friendly and customizable interface designed to detect and track objects in real-time video streams from sources such as RTSP, UDP, and YouTube URLs, as well as static videos and images.
+# 🔬 YOLO Vision Studio
 
+**Real-time Object Detection · Segmentation · Pose Estimation · Tracking**
+**Powered by YOLOv8, YOLO World & Streamlit**
 
-## <span style="color:deepskyblue">Explore Implementation Details on Medium (3 parts blog series) </span>
-For a deeper dive into the implementation, check out my three-part blog series on [Medium](https://medium.com/@mycodingmantras), where I detail the [step-by-step process of creating this web application](https://medium.com/@mycodingmantras/building-a-real-time-object-detection-and-tracking-app-with-yolov8-and-streamlit-part-1-30c56f5eb956).
+[![Stars](https://img.shields.io/github/stars/CodingMantras/yolov8-streamlit-detection-tracking?style=for-the-badge&logo=github)](https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/stargazers)
+[![Python](https://img.shields.io/badge/Python-3.9+-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.40+-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io)
+[![Ultralytics](https://img.shields.io/badge/Ultralytics-8.3+-purple?style=for-the-badge)](https://ultralytics.com)
+[![License](https://img.shields.io/github/license/CodingMantras/yolov8-streamlit-detection-tracking?style=for-the-badge)](LICENSE)
 
+[Live Demo](https://yolov8-object-detection-and-tracking-app.streamlit.app/) · [Blog Series](https://medium.com/@mycodingmantras/building-a-real-time-object-detection-and-tracking-app-with-yolov8-and-streamlit-part-1-30c56f5eb956) · [Report Bug](https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/issues)
 
-## <span style="color:deepskyblue">WebApp Demo on Streamlit Server</span>
+</div>
 
-Thank you team [Streamlit](<https://github.com/streamlit/streamlit>) for the community support for the cloud upload. 
+---
 
-This app is up and running on Streamlit cloud server!!! You can check the demo of this web application on this link 
-[yolov8-streamlit-detection-tracking-webapp](https://yolov8-object-detection-and-tracking-app.streamlit.app/)
+## 🆕 What's New in v2.0
 
-**Note**: In the demo, Due to non-availability of GPUs, you may encounter slow video inferencing.
+> **Thank you for 400+ ⭐ stars!** This major update brings a completely rewritten, modular codebase with exciting new capabilities.
 
+| Feature | v1.0 | v2.0 |
+|---------|------|------|
+| Object Detection | YOLOv8n | YOLOv8n + YOLO World (text prompts) |
+| Segmentation | YOLOv8n-seg | YOLOv8n-seg (improved UI) |
+| Pose Estimation | ❌ | ✅ YOLOv8n-pose |
+| Tracking | Basic | ByteTrack + BoTSORT with unique-object counting |
+| Object Counting | ❌ | ✅ Real-time per-class & total counts |
+| YOLO World | ❌ | ✅ Open-vocabulary detection via text prompt |
+| Architecture | Monolithic | Modular service-based design |
+| Video Metrics | ❌ | ✅ Live FPS, counts & tracking overlay |
+| Codebase | `helper.py + settings.py` | `config · model_loader · image_service · video_service` |
 
-## <span style="color:deepskyblue"> Tracking With Object Detection Demo</span>
+---
 
+## ✨ Features
+
+### 📷 Image Inference
+- **Object Detection** — Detect 80+ COCO classes with YOLOv8
+- **YOLO World (Text Prompt)** — Type any object class and detect it instantly using open-vocabulary detection (YOLOv8l-worldv2)
+- **Instance Segmentation** — Pixel-level object segmentation
+- **Pose Estimation** — Human body keypoint and skeleton detection
+- Per-class metrics, confidence scores and detailed results table
+
+### 🎬 Video Inference
+- **Multiple Sources**: Stored videos, Webcam, RTSP streams, YouTube URLs
+- **Real-time Tracking**: ByteTrack and BoTSORT algorithms
+- **Object Counting**: Live per-class and total object counts on every frame
+- **Unique Object Tracking**: Track and count unique objects across frames
+- **YOLO World in Video**: Text-prompt search in video streams
+- **Live Metrics**: FPS counter, frame number, and class breakdowns in sidebar
+- **Count Overlay**: On-frame object count badge
+
+### 🏗️ Architecture
+- **Modular Design**: Separate services for image and video inference
+- **Centralized Config**: Single `config.py` for all settings
+- **Cached Models**: `@st.cache_resource` for instant model reuse
+- **Clean Routing**: Task + Mode based dispatch in `app.py`
+
+---
+
+## 📸 Demo
+
+### Tracking with Object Detection
 <https://user-images.githubusercontent.com/104087274/234874398-75248e8c-6965-4c91-9176-622509f0ad86.mov>
 
-## Overview
-
+### Application Overview
 <https://github.com/user-attachments/assets/85df351a-371c-47e0-91a0-a816cf468d19.mov>
 
+### Screenshots
 
-## Demo Pics
+| Home Page | Detection Result | Segmentation |
+|:---------:|:----------------:|:------------:|
+| <img src="https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/blob/master/assets/pic1.png" width="300"> | <img src="https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/blob/master/assets/pic3.png" width="300"> | <img src="https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/blob/master/assets/segmentation.png" width="300"> |
 
-### Home page
+---
 
-<img src="https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/blob/master/assets/pic1.png" >
+## 🚀 Quick Start
 
-### Page after uploading an image and object detection
+### Prerequisites
 
-<img src="https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/blob/master/assets/pic3.png" >
+- Python 3.9 or higher
+- GPU recommended (NVIDIA CUDA) for real-time video inference
+- Webcam (optional, for live detection)
 
-### Segmentation task on image
-
-<img src="https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/blob/master/assets/segmentation.png" >
-
-## Requirements
-
-Python 3.6+
-YOLOv8
-Streamlit
+### Installation
 
 ```bash
-pip install ultralytics streamlit pytube
+# 1. Clone the repository
+git clone https://github.com/CodingMantras/yolov8-streamlit-detection-tracking.git
+cd yolov8-streamlit-detection-tracking
+
+# 2. Create a virtual environment
+python -m venv venv
+source venv/bin/activate        # Linux / macOS
+# venv\Scripts\activate         # Windows
+
+# 3. Install dependencies
+pip install -r requirements.txt
 ```
 
-## Installation
+### Download Model Weights
 
-- Clone the repository: git clone <https://github.com/CodingMantras/yolov8-streamlit-detection-tracking.git>
-- Change to the repository directory: `cd yolov8-streamlit-detection-tracking`
-- Create `weights`, `videos`, and `images` directories inside the project.
-- Download the pre-trained YOLOv8 weights from (<https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt>) and save them to the `weights` directory in the same project.
+The default detection (`yolov8n.pt`) and segmentation (`yolov8n-seg.pt`) weights ship in the `weights/` directory. Additional models (**YOLO World**, **Pose**) are auto-downloaded by Ultralytics on first use.
 
-## Usage
+To pre-download manually:
 
-- Run the app with the following command: `streamlit run app.py`
-- The app should open in a new browser window.
+```bash
+# Pose estimation
+wget -P weights/ https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8n-pose.pt
 
-### ML Model Config
+# YOLO World v2 (large) — auto-downloads if not present
+# No manual action needed; runs on first inference
+```
 
-- Select task (Detection, Segmentation)
-- Select model confidence
-- Use the slider to adjust the confidence threshold (25-100) for the model.
+### Run the App
 
-One the model config is done, select a source.
+```bash
+streamlit run app.py
+```
 
-### Detection on images
+The app opens at **http://localhost:8501**.
 
-- The default image with its objects-detected image is displayed on the main page.
-- Select a source. (radio button selection `Image`).
-- Upload an image by clicking on the "Browse files" button.
-- Click the "Detect Objects" button to run the object detection algorithm on the uploaded image with the selected confidence threshold.
-- The resulting image with objects detected will be displayed on the page. Click the "Download Image" button to download the image.("If save image to download" is selected)
+---
 
-## Detection in Videos
+## 📖 Usage Guide
 
-- Create a folder with name `videos` in the same directory
-- Dump your videos in this folder
-- In `settings.py` edit the following lines.
+### Sidebar Controls
+
+1. **Inference Mode** — Choose between 📷 *Image Inference* or 🎬 *Video Inference*
+2. **Task** — Select one of:
+   - **Detection** — Standard YOLOv8 object detection
+   - **Segmentation** — Instance segmentation with pixel masks
+   - **YOLO World (Text Prompt)** — Open-vocabulary detection (type any class!)
+   - **Pose Estimation** — Human body keypoint detection
+3. **Model Confidence** — Adjust the confidence threshold (10–100%)
+
+### Image Inference
+
+1. Select **📷 Image Inference** mode
+2. Choose a task (Detection, Segmentation, YOLO World, or Pose)
+3. Upload an image or use the default
+4. For **YOLO World**: type comma-separated class names (e.g., `person, backpack, laptop`)
+5. Click **🚀 Run** to see results with per-class metrics
+
+### Video Inference
+
+1. Select **🎬 Video Inference** mode
+2. Choose a task
+3. Pick a video source: **Stored Video**, **Webcam**, **RTSP**, or **YouTube**
+4. Enable **Object Tracking** (ByteTrack or BoTSORT) for unique-object counting
+5. For **YOLO World**: enter text classes to search for in the video
+6. Click **🚀 Detect** — live metrics appear in the sidebar
+
+### Adding Your Own Videos
+
+Drop `.mp4` files into the `videos/` directory. They appear automatically in the stored-video dropdown — no code changes required (the config scans the folder at startup).
+
+---
+
+## 🗂️ Project Structure
+
+```
+yolov8-streamlit-detection-tracking/
+├── app.py                # Main Streamlit application & routing
+├── config.py             # Centralized configuration (paths, models, UI)
+├── model_loader.py       # Model loading with @st.cache_resource
+├── image_service.py      # Image inference (detection, segmentation, world, pose)
+├── video_service.py      # Video inference (tracking, counting, all sources)
+├── requirements.txt      # Python dependencies
+├── packages.txt          # System packages for Streamlit Cloud
+├── README.md
+├── assets/               # Screenshots and demo media
+├── images/               # Sample images
+├── videos/               # Sample videos (add your .mp4 files here)
+└── weights/              # Model weights (yolov8n.pt, yolov8n-seg.pt, ...)
+```
+
+### Module Responsibilities
+
+| Module | Purpose |
+|--------|---------|
+| `config.py` | All paths, model names, UI constants, and default values |
+| `model_loader.py` | Cached model loading; resolves local weights vs auto-download |
+| `image_service.py` | Full image-mode UI: upload → inference → results display |
+| `video_service.py` | Full video-mode UI: source selection → frame loop → live metrics |
+| `app.py` | Page config, sidebar, and routing to the correct service |
+
+---
+
+## ⚙️ Configuration
+
+All configuration lives in `config.py`. Key settings:
 
 ```python
-# video
-VIDEO_DIR = ROOT / 'videos' # After creating the videos folder
+# Models — change to larger variants for better accuracy
+DETECTION_MODEL    = "yolov8n.pt"        # or yolov8s.pt, yolov8m.pt, yolov8l.pt
+SEGMENTATION_MODEL = "yolov8n-seg.pt"    # or yolov8s-seg.pt
+YOLO_WORLD_MODEL   = "yolov8l-worldv2.pt"
+POSE_MODEL         = "yolov8n-pose.pt"   # or yolov8s-pose.pt
 
-# Suppose you have four videos inside videos folder
-# Edit the name of video_1, 2, 3, 4 (with the names of your video files) 
-VIDEO_1_PATH = VIDEO_DIR / 'video_1.mp4' 
-VIDEO_2_PATH = VIDEO_DIR / 'video_2.mp4'
-VIDEO_3_PATH = VIDEO_DIR / 'video_3.mp4'
-VIDEO_4_PATH = VIDEO_DIR / 'video_4.mp4'
+# Inference defaults
+DEFAULT_CONFIDENCE = 0.40
+DEFAULT_IOU        = 0.50
+VIDEO_DISPLAY_WIDTH = 720
 
-# Edit the same names here also.
-VIDEOS_DICT = {
-    'video_1': VIDEO_1_PATH,
-    'video_2': VIDEO_2_PATH,
-    'video_3': VIDEO_3_PATH,
-    'video_4': VIDEO_4_PATH,
-}
-
-# Your videos will start appearing inside streamlit webapp 'Choose a video'.
+# YOLO World default classes
+DEFAULT_WORLD_CLASSES = "person, car, dog, cat, chair, table, laptop, phone"
 ```
 
-- Click on `Detect Video Objects` button and the selected task (detection/segmentation) will start on the selected video.
+### Custom Models
 
-### Detection on RTSP
+To use your own trained model:
 
-- Select the RTSP stream button
-- Enter the rtsp url inside the textbox and hit `Detect Objects` button
+```python
+# In config.py
+DETECTION_MODEL = "my_custom_model.pt"
+# Place the .pt file in the weights/ directory
+```
 
-### Detection on YouTube Video URL
+---
 
-- Select the source as YouTube
-- Copy paste the url inside the text box.
-- The detection/segmentation task will start on the YouTube video url
+## ☁️ Deploy to Streamlit Cloud
 
-<https://user-images.githubusercontent.com/104087274/226178296-684ad72a-fe5f-4589-b668-95c835cd8d8a.mov>
+1. Push the repository to GitHub
+2. Go to [share.streamlit.io](https://share.streamlit.io) and connect your repo
+3. Set the main file path to `app.py`
+4. The `packages.txt` file handles system-level dependencies automatically
 
-## Acknowledgements
+> **Note**: Streamlit Cloud has no GPU — video inference will be slower. Image inference works well.
 
-This app uses [YOLOv8](<https://github.com/ultralytics/ultralytics>) for object detection algorithm and [Streamlit](<https://github.com/streamlit/streamlit>) library for the user interface.
+---
 
-### Disclaimer
+## 🤝 Contributing
 
-This project is intended as a learning exercise and demonstration of integrating various technologies, including:
+Contributions are welcome! Here's how:
 
-- Streamlit
-- YoloV8
-- Object-Detection on Images And Live Video Streams
-- Python-OpenCV
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m "Add amazing feature"`
+4. Push: `git push origin feature/amazing-feature`
+5. Open a Pull Request
 
-Please note that this application is not designed or tested for production use. It serves as an educational resource and a showcase of technology integration rather than a production-ready web application.
+### Ideas for Contributions
 
-Contributors and users are welcome to explore, learn from, and build upon this project for educational purposes.
+- [ ] Add model benchmarking / comparison page
+- [ ] Export detection results to CSV / JSON
+- [ ] Add YOLO-NAS or RT-DETR model support
+- [ ] Region of Interest (ROI) based counting
+- [ ] Multi-camera RTSP dashboard
 
-### Hit star ⭐ if you like this repo!!!
+---
+
+## 📚 Resources
+
+- [Ultralytics YOLOv8 Documentation](https://docs.ultralytics.com/)
+- [YOLO World Paper](https://arxiv.org/abs/2401.17270)
+- [Streamlit Documentation](https://docs.streamlit.io/)
+- [ByteTrack Paper](https://arxiv.org/abs/2110.06864)
+- [Blog Series — Building this App](https://medium.com/@mycodingmantras/building-a-real-time-object-detection-and-tracking-app-with-yolov8-and-streamlit-part-1-30c56f5eb956)
+
+---
+
+## 📄 License
+
+This project is open-source and available for educational and research purposes.
+
+## 🙏 Acknowledgements
+
+- [Ultralytics](https://github.com/ultralytics/ultralytics) for YOLOv8 and YOLO World
+- [Streamlit](https://github.com/streamlit/streamlit) for the web framework
+- All **400+** stargazers for the love and support!
+
+---
+
+<div align="center">
+
+**If you find this project useful, please consider giving it a ⭐!**
+
+Made with ❤️ by [CodingMantras](https://github.com/CodingMantras)
+
+</div>
