@@ -142,6 +142,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+local_folder/
+
 auto_commit.py
 *.pt
 *.ts
