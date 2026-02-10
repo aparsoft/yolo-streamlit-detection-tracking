@@ -23,7 +23,7 @@ APP_ICON = "🔬"
 APP_VERSION = "2.0.0"
 APP_DESCRIPTION = (
     "Real-time Object Detection, Segmentation, Pose Estimation & Tracking "
-    "powered by YOLOv8 & YOLO World"
+    "powered by YOLO26, YOLOE-26 & Streamlit"
 )
 
 # ─── Inference Modes ─────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ MODES_LIST = [MODE_IMAGE, MODE_VIDEO]
 # ─── Tasks ───────────────────────────────────────────────────────────────────
 TASK_DETECT = "Detection"
 TASK_SEGMENT = "Segmentation"
-TASK_WORLD = "YOLO World (Text Prompt)"
+TASK_WORLD = "YOLOE-26 (Text Prompt)"
 TASK_POSE = "Pose Estimation"
 TASKS_LIST = [TASK_DETECT, TASK_SEGMENT, TASK_WORLD, TASK_POSE]
 
@@ -46,13 +46,13 @@ SOURCE_YOUTUBE = "YouTube"
 VIDEO_SOURCES = [SOURCE_STORED, SOURCE_WEBCAM, SOURCE_RTSP, SOURCE_YOUTUBE]
 
 # ─── Model Paths ─────────────────────────────────────────────────────────────
-# Local weights (ship with the repo)
-DETECTION_MODEL = "yolov8n.pt"
-SEGMENTATION_MODEL = "yolov8n-seg.pt"
+# YOLO26 models — auto-downloaded by ultralytics on first run
+DETECTION_MODEL = "yolo26n.pt"
+SEGMENTATION_MODEL = "yolo26n-seg.pt"
+POSE_MODEL = "yolo26n-pose.pt"
 
-# Downloaded on first run by ultralytics
-YOLO_WORLD_MODEL = "yolov8l-worldv2.pt"
-POSE_MODEL = "yolov8n-pose.pt"
+# YOLOE-26: open-vocabulary detection + segmentation via text prompts
+YOLO_WORLD_MODEL = "yoloe-26l-seg.pt"
 
 # ─── Default Assets ──────────────────────────────────────────────────────────
 DEFAULT_IMAGE = IMAGES_DIR / "office_4.jpg"
@@ -78,7 +78,7 @@ TRACKER_BYTETRACK = "bytetrack.yaml"
 TRACKER_BOTSORT = "botsort.yaml"
 TRACKERS_LIST = [TRACKER_BYTETRACK, TRACKER_BOTSORT]
 
-# ─── YOLO World Defaults ─────────────────────────────────────────────────────
+# ─── YOLOE-26 Open-Vocabulary Defaults ────────────────────────────────────────
 DEFAULT_WORLD_CLASSES = "person, car, dog, cat, chair, table, laptop, phone"
 
 
