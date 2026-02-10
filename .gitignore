@@ -145,3 +145,4 @@ dmypy.json
 auto_commit.py
 *.pt
 *.ts
+**crossing**
