@@ -43,23 +43,23 @@ def render(task: str, confidence: float) -> None:
     with col1:
         if uploaded:
             image = PIL.Image.open(uploaded)
-            st.image(image, caption="Original Image", use_container_width=True)
+            st.image(image, caption="Original Image", width="stretch")
         elif config.DEFAULT_IMAGE.exists():
             st.image(
                 str(config.DEFAULT_IMAGE),
                 caption="Default Image",
-                use_container_width=True,
+                width="stretch",
             )
 
     with col2:
         if uploaded:
-            if st.button(f"🚀 Run {task}", type="primary", use_container_width=True):
+            if st.button(f"🚀 Run {task}", type="primary", width="stretch"):
                 _run_inference(model, image, confidence, task)
         elif config.DEFAULT_DETECT_IMAGE.exists():
             st.image(
                 str(config.DEFAULT_DETECT_IMAGE),
                 caption="Detected Image",
-                use_container_width=True,
+                width="stretch",
             )
 
 
@@ -97,7 +97,7 @@ def _run_inference(model, image: PIL.Image.Image, confidence: float, task: str) 
         result = results[0]
 
         annotated = result.plot()[:, :, ::-1]  # BGR → RGB
-        st.image(annotated, caption=f"{task} Result", use_container_width=True)
+        st.image(annotated, caption=f"{task} Result", width="stretch")
 
     _display_results(result, task)
 
@@ -134,7 +134,7 @@ def _display_results(result, task: str) -> None:
                 {"Class": names[int(c)], "Confidence": f"{cf:.2%}"}
                 for c, cf in zip(classes, confs)
             ]
-            st.dataframe(pd.DataFrame(rows), use_container_width=True)
+            st.dataframe(pd.DataFrame(rows), width="stretch")
 
         # ── Keypoints (Pose) ──────────────────────────────────────────────
         if task == config.TASK_POSE:
