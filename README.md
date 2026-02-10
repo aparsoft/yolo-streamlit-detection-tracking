@@ -3,7 +3,7 @@
 # 🔬 YOLO Vision Studio
 
 **Real-time Object Detection · Segmentation · Pose Estimation · Tracking**
-**Powered by YOLO26, YOLOE-26 & Streamlit**
+**Powered by YOLO26, YOLO World v2 & Streamlit**
 
 [![Stars](https://img.shields.io/github/stars/CodingMantras/yolov8-streamlit-detection-tracking?style=for-the-badge&logo=github)](https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/stargazers)
 [![Python](https://img.shields.io/badge/Python-3.9+-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
@@ -26,11 +26,13 @@
 | Object Detection | YOLOv8n | YOLO26n (NMS-free, 43% faster CPU) |
 | Segmentation | YOLOv8n-seg | YOLO26n-seg (multi-scale proto + semantic loss) |
 | Pose Estimation | ❌ | ✅ YOLO26n-pose (RLE-based keypoints) |
-| Open-Vocabulary | ❌ | ✅ YOLOE-26 (text-prompt detection + segmentation) |
-| Tracking | Basic | ByteTrack + BoTSORT with unique-object counting |
-| Object Counting | ❌ | ✅ Real-time per-class & total counts |
+| Open-Vocabulary | ❌ | ✅ YOLO World v2 (natural language text prompts) |
+| Tracking | Basic | ByteTrack + BoTSORT with local + global counting |
+| Object Counting | ❌ | ✅ Per-frame local + cumulative global counts |
+| Skip Frames | ❌ | ✅ 1–8× skip for fast inference on long videos |
+| Webcam | OpenCV (broken in cloud) | ✅ streamlit-webrtc (browser-native) |
 | Architecture | Monolithic | Modular service-based design |
-| Video Metrics | ❌ | ✅ Live FPS, counts & tracking overlay |
+| Video Metrics | ❌ | ✅ Live FPS, local/global counts & tracking overlay |
 | Codebase | `helper.py + settings.py` | `config · model_loader · image_service · video_service` |
 
 ---
@@ -39,19 +41,19 @@
 
 ### 📷 Image Inference
 - **Object Detection** — Detect 80+ COCO classes with YOLO26 (NMS-free, edge-optimized)
-- **YOLOE-26 (Text Prompt)** — Type any object class and detect + segment it instantly using open-vocabulary detection
+- **YOLO World v2 (Text Prompt)** — Natural language prompts like *"person in black"*, *"red car"*, *"laptop on table"* for open-vocabulary detection
 - **Instance Segmentation** — Pixel-level object segmentation with multi-scale proto modules
 - **Pose Estimation** — Human body keypoint and skeleton detection with RLE precision
 - Per-class metrics, confidence scores and detailed results table
 
 ### 🎬 Video Inference
-- **Multiple Sources**: Stored videos, Webcam, RTSP streams, YouTube URLs
-- **Real-time Tracking**: ByteTrack and BoTSORT algorithms
-- **Object Counting**: Live per-class and total object counts on every frame
-- **Unique Object Tracking**: Track and count unique objects across frames
-- **YOLOE-26 in Video**: Text-prompt open-vocabulary search in video streams
-- **Live Metrics**: FPS counter, frame number, and class breakdowns in sidebar
-- **Count Overlay**: On-frame object count badge
+- **Multiple Sources**: Stored videos, Webcam (browser-native via WebRTC), RTSP streams, YouTube URLs
+- **Real-time Tracking**: ByteTrack and BoTSORT algorithms (enabled by default)
+- **Local + Global Counting**: Per-frame counts (green) and cumulative unique-object counts (yellow) displayed on every frame
+- **Skip Frames**: Adjustable 1–8× slider for faster inference on long or high-FPS videos
+- **YOLO World v2 in Video**: Natural language text-prompt search in video streams
+- **Live Metrics**: Separate local (this frame) and global (cumulative) sections in sidebar
+- **Count Overlay**: Two-line on-frame badge — local in green, global in yellow
 
 ### 🏗️ Architecture
 - **Modular Design**: Separate services for image and video inference
@@ -103,7 +105,7 @@ pip install -r requirements.txt
 
 ### Download Model Weights
 
-The default detection and segmentation weights are auto-downloaded by Ultralytics on first use. All YOLO26 models (detection, segmentation, pose) and YOLOE-26 (open-vocabulary) are fetched automatically.
+The default detection and segmentation weights are auto-downloaded by Ultralytics on first use. All YOLO26 models (detection, segmentation, pose) and YOLO World v2 (open-vocabulary) are fetched automatically.
 
 To pre-download manually:
 
@@ -117,8 +119,8 @@ wget -P weights/ https://github.com/ultralytics/assets/releases/download/v8.4.0/
 # Pose estimation
 wget -P weights/ https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26n-pose.pt
 
-# YOLOE-26 open-vocabulary (larger, auto-downloads if not present)
-# No manual action needed; runs on first inference
+# YOLO World v2 open-vocabulary (auto-downloads if not present)
+wget -P weights/ https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8l-worldv2.pt
 ```
 
 ### Run the App
@@ -139,7 +141,7 @@ The app opens at **http://localhost:8501**.
 2. **Task** — Select one of:
    - **Object Detection** — Standard YOLO26 object detection (NMS-free, end-to-end)
    - **Segmentation** — Instance segmentation with pixel masks
-   - **YOLOE-26 (Text Prompt)** — Open-vocabulary detection (type any class!)
+   - **YOLO World v2 (Text Prompt)** — Open-vocabulary detection with natural language prompts
    - **Pose Estimation** — Human body keypoint detection
 3. **Model Confidence** — Adjust the confidence threshold (10–100%)
 
@@ -148,7 +150,7 @@ The app opens at **http://localhost:8501**.
 1. Select **📷 Image Inference** mode
 2. Choose a task (Detection, Segmentation, YOLO World, or Pose)
 3. Upload an image or use the default
-4. For **YOLOE-26**: type comma-separated class names (e.g., `person, backpack, laptop`)
+4. For **YOLO World v2**: type descriptive phrases (e.g., `person in black, red car, laptop on table`)
 5. Click **🚀 Run** to see results with per-class metrics
 
 ### Video Inference
@@ -156,9 +158,10 @@ The app opens at **http://localhost:8501**.
 1. Select **🎬 Video Inference** mode
 2. Choose a task
 3. Pick a video source: **Stored Video**, **Webcam**, **RTSP**, or **YouTube**
-4. Enable **Object Tracking** (ByteTrack or BoTSORT) for unique-object counting
-5. For **YOLOE-26**: enter text classes to search for in the video
-6. Click **🚀 Detect** — live metrics appear in the sidebar
+4. **Object Tracking** is enabled by default (ByteTrack or BoTSORT) — local + global counts display automatically
+5. Adjust **Skip Frames** (1–8) in the sidebar for faster inference on long videos
+6. For **YOLO World v2**: enter natural language prompts to search for in the video
+7. Click **🚀 Detect** — local and global metrics appear in the sidebar
 
 ### Adding Your Own Videos
 
@@ -204,7 +207,7 @@ All configuration lives in `config.py`. Key settings:
 # Models — change to larger variants for better accuracy
 DETECTION_MODEL    = "yolo26n.pt"        # or yolo26s.pt, yolo26m.pt, yolo26l.pt
 SEGMENTATION_MODEL = "yolo26n-seg.pt"    # or yolo26s-seg.pt
-YOLO_WORLD_MODEL   = "yoloe-26l-seg.pt"  # open-vocabulary (text prompts)
+YOLO_WORLD_MODEL   = "yolov8l-worldv2.pt" # open-vocabulary (natural language)
 POSE_MODEL         = "yolo26n-pose.pt"   # or yolo26s-pose.pt
 
 # Inference defaults
@@ -212,8 +215,11 @@ DEFAULT_CONFIDENCE = 0.40
 DEFAULT_IOU        = 0.50
 VIDEO_DISPLAY_WIDTH = 720
 
-# YOLOE-26 default classes
-DEFAULT_WORLD_CLASSES = "person, car, dog, cat, chair, table, laptop, phone"
+# Skip-frame control for video inference
+DEFAULT_SKIP_FRAMES = 1   # process every frame (1–8)
+
+# YOLO World v2 default prompts
+DEFAULT_WORLD_CLASSES = "person in black, red car, dog, laptop on table"
 ```
 
 ### Custom Models
@@ -235,7 +241,7 @@ DETECTION_MODEL = "my_custom_model.pt"
 3. Set the main file path to `app.py`
 4. The `packages.txt` file handles system-level dependencies automatically
 
-> **Note**: Streamlit Cloud has no GPU — video inference will be slower. Image inference works well.
+> **Note**: Streamlit Cloud has no GPU — video inference will be slower. Image inference works well. Webcam uses **streamlit-webrtc** so it works natively in the browser (no server-side camera access needed).
 
 ---
 
@@ -262,7 +268,8 @@ Contributions are welcome! Here's how:
 ## 📚 Resources
 
 - [Ultralytics YOLO26 Documentation](https://docs.ultralytics.com/models/yolo26/)
-- [YOLOE-26 Open-Vocabulary Docs](https://docs.ultralytics.com/models/yoloe/)
+- [YOLO World v2 Documentation](https://docs.ultralytics.com/models/yolo-world/)
+- [streamlit-webrtc](https://github.com/whitphx/streamlit-webrtc) — Browser-native webcam
 - [Streamlit Documentation](https://docs.streamlit.io/)
 - [ByteTrack Paper](https://arxiv.org/abs/2110.06864)
 - [Blog Series — Building this App](https://medium.com/@mycodingmantras/building-a-real-time-object-detection-and-tracking-app-with-yolov8-and-streamlit-part-1-30c56f5eb956)
@@ -275,8 +282,9 @@ This project is open-source and available for educational and research purposes.
 
 ## 🙏 Acknowledgements
 
-- [Ultralytics](https://github.com/ultralytics/ultralytics) for YOLO26 and YOLOE-26
+- [Ultralytics](https://github.com/ultralytics/ultralytics) for YOLO26 and YOLO World v2
 - [Streamlit](https://github.com/streamlit/streamlit) for the web framework
+- [streamlit-webrtc](https://github.com/whitphx/streamlit-webrtc) for browser-based webcam
 - All **400+** stargazers for the love and support!
 
 ---
