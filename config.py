@@ -23,7 +23,7 @@ APP_ICON = "🔬"
 APP_VERSION = "2.0.0"
 APP_DESCRIPTION = (
     "Real-time Object Detection, Segmentation, Pose Estimation & Tracking "
-    "powered by YOLO26, YOLOE-26 & Streamlit"
+    "powered by YOLO26, YOLO World v2 & Streamlit"
 )
 
 # ─── Inference Modes ─────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ MODES_LIST = [MODE_IMAGE, MODE_VIDEO]
 # ─── Tasks ───────────────────────────────────────────────────────────────────
 TASK_DETECT = "Detection"
 TASK_SEGMENT = "Segmentation"
-TASK_WORLD = "YOLOE-26 (Text Prompt)"
+TASK_WORLD = "YOLO World v2 (Text Prompt)"
 TASK_POSE = "Pose Estimation"
 TASKS_LIST = [TASK_DETECT, TASK_SEGMENT, TASK_WORLD, TASK_POSE]
 
@@ -51,8 +51,9 @@ DETECTION_MODEL = "yolo26n.pt"
 SEGMENTATION_MODEL = "yolo26n-seg.pt"
 POSE_MODEL = "yolo26n-pose.pt"
 
-# YOLOE-26: open-vocabulary detection + segmentation via text prompts
-YOLO_WORLD_MODEL = "yoloe-26l-seg.pt"
+# YOLO World v2: open-vocabulary detection via natural language text prompts
+# Supports descriptive prompts like "person in black", "red car", etc.
+YOLO_WORLD_MODEL = "yolov8l-worldv2.pt"
 
 # ─── Default Assets ──────────────────────────────────────────────────────────
 DEFAULT_IMAGE = IMAGES_DIR / "office_4.jpg"
@@ -73,12 +74,18 @@ MAX_CONFIDENCE = 100  # slider max (%)
 VIDEO_DISPLAY_WIDTH = 720
 WEBCAM_PATH = 0
 
+# ─── Skip Frames ─────────────────────────────────────────────────────────────
+DEFAULT_SKIP_FRAMES = 1  # process every frame
+MIN_SKIP_FRAMES = 1
+MAX_SKIP_FRAMES = 8
+
 # ─── Tracker Config ──────────────────────────────────────────────────────────
 TRACKER_BYTETRACK = "bytetrack.yaml"
 TRACKER_BOTSORT = "botsort.yaml"
 TRACKERS_LIST = [TRACKER_BYTETRACK, TRACKER_BOTSORT]
 
-# ─── YOLOE-26 Open-Vocabulary Defaults ────────────────────────────────────────
+# ─── YOLO World v2 Defaults ───────────────────────────────────────────────────
+# Supports natural language prompts like "person in black", "red car", etc.
 DEFAULT_WORLD_CLASSES = "person, car, dog, cat, chair, table, laptop, phone"
 
 
