@@ -56,24 +56,22 @@ def _ensure_device(model) -> None:
 def _set_world_classes(model: YOLOWorld, classes: list[str]) -> None:
     """Safely set classes on a YOLOWorld model, avoiding CPU/CUDA mismatch.
 
-    The trick: move entire model to CPU → set_classes (creates CPU
-    text features) → move everything to CUDA uniformly.
+    ``set_classes()`` internally creates text-embedding tensors on CPU.
+    If the model is already on CUDA (e.g. after a prior ``predict()``),
+    calling ``set_classes()`` directly causes a device mismatch crash.
+
+    Fix: move model → CPU → set_classes → move to **best** device.
+    We always move to the best available device (CUDA if present) after
+    setting classes, because freshly loaded models start on CPU and
+    ``predict()`` alone may not move the text-embedding tensors.
     """
-    try:
-        # Get the device the model is currently on
-        current_device = next(model.model.parameters()).device
-        # Move to CPU so set_classes() creates embeddings on the same device
-        model.to("cpu")
-        model.set_classes(classes)
-        # Move everything (weights + new text embeddings) to target device
-        model.to(current_device)
-    except StopIteration:
-        # No parameters found — just set classes directly
-        model.set_classes(classes)
-    except Exception:
-        # Fallback: set classes then brute-force device sync
-        model.set_classes(classes)
-        _ensure_device(model)
+    # 1. CPU so set_classes creates embeddings on the same device as weights
+    model.to("cpu")
+    model.set_classes(classes)
+
+    # 2. Move everything (weights + fresh text embeddings) to best device
+    best = "cuda:0" if torch.cuda.is_available() else "cpu"
+    model.to(best)
 
 
 def get_model_for_task(
