@@ -5,7 +5,7 @@ Models are loaded once and reused across reruns.
 
 import torch
 import streamlit as st
-from ultralytics import YOLO, YOLOWorld
+from ultralytics import YOLO, YOLOWorld, YOLOE
 
 import config
 
@@ -32,6 +32,19 @@ def load_world_model(model_name: str) -> YOLOWorld:
     """
     path = config.resolve_model_path(model_name)
     model = YOLOWorld(path)
+    config.sweep_stray_weights()
+    return model
+
+
+@st.cache_resource
+def load_yoloe_model(model_name: str) -> YOLOE:
+    """Load a YOLOE model for text-prompted detection + segmentation.
+
+    Uses the ``YOLOE`` class which supports category-level text prompts
+    and produces both bounding boxes and instance segmentation masks.
+    """
+    path = config.resolve_model_path(model_name)
+    model = YOLOE(path)
     config.sweep_stray_weights()
     return model
 
@@ -74,6 +87,18 @@ def _set_world_classes(model: YOLOWorld, classes: list[str]) -> None:
     model.to(best)
 
 
+def _set_yoloe_classes(model: YOLOE, classes: list[str]) -> None:
+    """Safely set classes on a YOLOE model, avoiding CPU/CUDA mismatch.
+
+    Same pattern as ``_set_world_classes`` but for YOLOE.
+    YOLOE supports category-level labels (not descriptive phrases).
+    """
+    model.to("cpu")
+    model.set_classes(classes)
+    best = "cuda:0" if torch.cuda.is_available() else "cpu"
+    model.to(best)
+
+
 def get_model_for_task(
     task: str,
     world_classes: list[str] | None = None,
@@ -96,6 +121,7 @@ def get_model_for_task(
         config.TASK_SEGMENT: config.SEGMENTATION_MODEL,
         config.TASK_POSE: config.POSE_MODEL,
         config.TASK_WORLD: config.YOLO_WORLD_MODEL,
+        config.TASK_YOLOE: config.YOLOE_MODEL,
     }
 
     name = model_name or _DEFAULTS.get(task, config.DETECTION_MODEL)
@@ -105,6 +131,11 @@ def get_model_for_task(
             model = load_world_model(name)
             if world_classes:
                 _set_world_classes(model, world_classes)
+            return model
+        if task == config.TASK_YOLOE:
+            model = load_yoloe_model(name)
+            if world_classes:
+                _set_yoloe_classes(model, world_classes)
             return model
         return load_model(name)
     except Exception as exc:
@@ -127,6 +158,7 @@ def load_fresh_model(
         config.TASK_SEGMENT: config.SEGMENTATION_MODEL,
         config.TASK_POSE: config.POSE_MODEL,
         config.TASK_WORLD: config.YOLO_WORLD_MODEL,
+        config.TASK_YOLOE: config.YOLOE_MODEL,
     }
 
     name = model_name or _DEFAULTS.get(task, config.DETECTION_MODEL)
@@ -137,6 +169,13 @@ def load_fresh_model(
         config.sweep_stray_weights()
         if world_classes:
             _set_world_classes(m, world_classes)
+        return m
+
+    if task == config.TASK_YOLOE:
+        m = YOLOE(path)
+        config.sweep_stray_weights()
+        if world_classes:
+            _set_yoloe_classes(m, world_classes)
         return m
 
     m = YOLO(path)
