@@ -146,5 +146,8 @@ local_folder/
 
 auto_commit.py
 *.pt
+*.pth
 *.ts
 **crossing**
+rf-detr-src/
+requirements_all.txt
