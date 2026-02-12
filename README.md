@@ -293,6 +293,6 @@ This project is open-source and available for educational and research purposes.
 
 **If you find this project useful, please consider giving it a ⭐!**
 
-Made with ❤️ by [CodingMantras](https://github.com/CodingMantras)
+Made with ❤️ by [Aparsoft](https://aparsoft.com/)
 
 </div>
