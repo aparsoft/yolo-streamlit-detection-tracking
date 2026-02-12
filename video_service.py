@@ -148,10 +148,14 @@ def render(task: str, confidence: float, selected_model: str | None = None) -> N
     """Render the full video-inference page for the chosen *task*."""
     st.header(f"🎬 Video · {task}")
 
-    # YOLO World text prompt
+    # YOLO World / YOLOE text prompt
     world_classes: list[str] | None = None
     if task == config.TASK_WORLD:
         world_classes = _world_class_input()
+        if not world_classes:
+            return
+    elif task == config.TASK_YOLOE:
+        world_classes = _yoloe_class_input()
         if not world_classes:
             return
 
@@ -186,6 +190,29 @@ def render(task: str, confidence: float, selected_model: str | None = None) -> N
         world_classes,
         selected_model,
     )
+
+
+# ── YOLOE helpers ────────────────────────────────────────────────────────────
+
+
+def _yoloe_class_input() -> list[str] | None:
+    """Show a text-area for category-level object classes (YOLOE)."""
+    st.markdown(
+        "💡 **Tip**: YOLOE supports **category-level** labels like `person`, `car`, `dog`. "
+        "It does **NOT** support descriptive phrases like *person in red shirt*. "
+        "Results include both bounding boxes **and** segmentation masks."
+    )
+    text = st.text_area(
+        "🔍 Enter object categories to detect & segment in video (comma-separated)",
+        value=config.DEFAULT_YOLOE_CLASSES,
+        help="YOLOE will search for these object categories in every frame and produce segmentation masks.",
+    )
+    classes = [c.strip() for c in text.split(",") if c.strip()]
+    if classes:
+        st.info(f"🎯 Detecting & segmenting: **{', '.join(classes)}**")
+    else:
+        st.warning("⚠️ Enter at least one object category.")
+    return classes or None
 
 
 # ── YOLO World helpers ───────────────────────────────────────────────────────
