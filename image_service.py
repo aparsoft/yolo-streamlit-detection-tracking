@@ -21,10 +21,14 @@ def render(task: str, confidence: float, selected_model: str | None = None) -> N
     """Render the full image-inference page for the chosen *task*."""
     st.header(f"📷 Image · {task}")
 
-    # YOLO World needs a text prompt before anything else
+    # YOLO World / YOLOE need a text prompt before anything else
     world_classes: list[str] | None = None
     if task == config.TASK_WORLD:
         world_classes = _world_class_input()
+        if not world_classes:
+            return
+    elif task == config.TASK_YOLOE:
+        world_classes = _yoloe_class_input()
         if not world_classes:
             return
 
@@ -61,6 +65,32 @@ def render(task: str, confidence: float, selected_model: str | None = None) -> N
                 caption="Detected Image",
                 width="stretch",
             )
+
+
+# ── YOLOE helpers ─────────────────────────────────────────────────────────────
+
+
+def _yoloe_class_input() -> list[str] | None:
+    """Show a text-area for the user to type category-level object classes."""
+    st.markdown(
+        "💡 **Tip**: YOLOE supports **category-level** labels like `person`, `car`, `dog`. "
+        "It does **NOT** support descriptive phrases like *person in red shirt*. "
+        "Results include both bounding boxes **and** segmentation masks."
+    )
+    text = st.text_area(
+        "🔍 Enter object categories to detect & segment (comma-separated)",
+        value=config.DEFAULT_YOLOE_CLASSES,
+        help=(
+            "YOLOE performs open-vocabulary detection + instance segmentation. "
+            "Use simple category names only (e.g. person, car, laptop)."
+        ),
+    )
+    classes = [c.strip() for c in text.split(",") if c.strip()]
+    if classes:
+        st.info(f"🎯 Detecting & segmenting: **{', '.join(classes)}**")
+    else:
+        st.warning("⚠️ Please enter at least one object category.")
+    return classes or None
 
 
 # ── YOLO World helpers ────────────────────────────────────────────────────────
@@ -144,8 +174,8 @@ def _display_results(result, task: str) -> None:
             else:
                 st.info("No poses detected — try lowering the confidence threshold.")
 
-        # ── Masks (Segmentation) ──────────────────────────────────────────
-        if task == config.TASK_SEGMENT:
+        # ── Masks (Segmentation / YOLOE) ──────────────────────────────────
+        if task in (config.TASK_SEGMENT, config.TASK_YOLOE):
             masks = getattr(result, "masks", None)
             if masks is not None and len(masks):
                 st.success(f"✅ Segmented **{len(masks)}** object(s)")
