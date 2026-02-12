@@ -9,7 +9,7 @@
 [![Python](https://img.shields.io/badge/Python-3.9+-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.40+-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io)
 [![Ultralytics](https://img.shields.io/badge/Ultralytics-8.3+-purple?style=for-the-badge)](https://ultralytics.com)
-[![License](https://img.shields.io/github/license/CodingMantras/yolov8-streamlit-detection-tracking?style=for-the-badge)](LICENSE)
+[![License](https://img.shields.io/github/license/aparsoft/yolov8-streamlit-detection-tracking?style=for-the-badge)](LICENSE)
 
 [Live Demo](https://yolov8-object-detection-and-tracking-app.streamlit.app/) · [Blog Series](https://medium.com/@mycodingmantras/building-a-real-time-object-detection-and-tracking-app-with-yolov8-and-streamlit-part-1-30c56f5eb956) · [Report Bug](https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/issues)
 
