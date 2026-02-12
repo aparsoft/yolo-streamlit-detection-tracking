@@ -39,8 +39,9 @@ MODES_LIST = [MODE_IMAGE, MODE_VIDEO]
 TASK_DETECT = "Detection"
 TASK_SEGMENT = "Segmentation"
 TASK_WORLD = "YOLO World v2 (Text Prompt)"
+TASK_YOLOE = "YOLOE (Text → Segmentation)"
 TASK_POSE = "Pose Estimation"
-TASKS_LIST = [TASK_DETECT, TASK_SEGMENT, TASK_WORLD, TASK_POSE]
+TASKS_LIST = [TASK_DETECT, TASK_SEGMENT, TASK_WORLD, TASK_YOLOE, TASK_POSE]
 
 # ─── Video Sources ───────────────────────────────────────────────────────────
 SOURCE_STORED = "Stored Video"
@@ -86,6 +87,14 @@ WORLD_MODELS = {
     "YOLOv8-xlarge-worldv2 (best accuracy)": "yolov8x-worldv2.pt",
 }
 
+YOLOE_MODELS = {
+    "YOLOE-26n-seg (fastest)": "yoloe-26n-seg.pt",
+    "YOLOE-26s-seg": "yoloe-26s-seg.pt",
+    "YOLOE-26m-seg": "yoloe-26m-seg.pt",
+    "YOLOE-26l-seg (recommended)": "yoloe-26l-seg.pt",
+    "YOLOE-26x-seg (best accuracy)": "yoloe-26x-seg.pt",
+}
+
 # Defaults (first key in each dict)
 DETECTION_MODEL = "yolo26n.pt"
 SEGMENTATION_MODEL = "yolo26n-seg.pt"
@@ -93,6 +102,9 @@ POSE_MODEL = "yolo26n-pose.pt"
 
 # YOLO World v2: open-vocabulary detection via natural language text prompts
 YOLO_WORLD_MODEL = "yolov8l-worldv2.pt"
+
+# YOLOE: open-vocabulary text-prompted detection + segmentation
+YOLOE_MODEL = "yoloe-26l-seg.pt"
 
 # ─── Default Assets ──────────────────────────────────────────────────────────
 DEFAULT_IMAGE = IMAGES_DIR / "office_4.jpg"
@@ -138,6 +150,11 @@ TRACKERS_LIST = [TRACKER_BYTETRACK, TRACKER_BOTSORT]
 # Supports natural language prompts like "person in black", "red car", etc.
 DEFAULT_WORLD_CLASSES = "person, car, dog, cat, chair, table, laptop, phone"
 
+# ─── YOLOE Defaults ──────────────────────────────────────────────────────────
+# YOLOE supports category-level text prompts (NOT descriptive phrases).
+# Unlike YOLO World v2, YOLOE provides detection + segmentation masks.
+DEFAULT_YOLOE_CLASSES = "person, car, dog, cat, chair, table, laptop, phone"
+
 
 def resolve_model_path(model_name: str) -> str:
     """Return local weights path if it exists, else the bare name for auto-download.
@@ -172,5 +189,6 @@ def get_model_catalog(task: str) -> dict[str, str]:
         TASK_SEGMENT: SEGMENTATION_MODELS,
         TASK_POSE: POSE_MODELS,
         TASK_WORLD: WORLD_MODELS,
+        TASK_YOLOE: YOLOE_MODELS,
     }
     return _CATALOGS.get(task, DETECTION_MODELS)
