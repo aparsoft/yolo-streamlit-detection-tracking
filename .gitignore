@@ -16,6 +16,9 @@ local_folder/
 demo.py
 runs/
 
+# Output written by docs/yolo26_playground.ipynb
+_playground_out/
+
 
 # Distribution / packaging
 .Python
