@@ -156,11 +156,30 @@ DEFAULT_WORLD_CLASSES = "person, car, dog, cat, chair, table, laptop, phone"
 DEFAULT_YOLOE_CLASSES = "person, car, dog, cat, chair, table, laptop, phone"
 
 
+def use_local_weights_dir() -> str | None:
+    """Point Ultralytics' asset lookup at this repo's ``weights/``.
+
+    Ultralytics resolves a missing asset against the current directory first and
+    then ``SETTINGS["weights_dir"]``. Unless that setting points here, a weight we
+    already have in ``weights/`` gets downloaded a second time into whatever
+    directory the process happens to be running from.
+
+    Returns the previous value if it was changed, else ``None``.
+    """
+    from ultralytics.utils import SETTINGS  # local import keeps config import cheap
+
+    previous = SETTINGS["weights_dir"]
+    if previous == str(WEIGHTS_DIR):
+        return None
+    SETTINGS["weights_dir"] = str(WEIGHTS_DIR)
+    return previous
+
+
 def resolve_model_path(model_name: str) -> str:
     """Return local weights path if it exists, else the bare name for auto-download.
 
     After auto-download, call ``sweep_stray_weights()`` to move any
-    ``.pt`` files that landed in the project root into ``weights/``.
+    weight files that landed in the project root into ``weights/``.
     """
     local = WEIGHTS_DIR / model_name
     if local.exists():
@@ -174,12 +193,18 @@ def resolve_model_path(model_name: str) -> str:
     return model_name
 
 
+# What an auto-download can drop in the project root: ``.pt`` checkpoints and the
+# ``.ts`` TorchScript CLIP text encoder that YOLO World v2 / YOLOE pull in.
+_STRAY_WEIGHT_PATTERNS = ("*.pt", "*.ts")
+
+
 def sweep_stray_weights() -> None:
-    """Move any ``.pt`` files from the project root into ``weights/``."""
-    for pt_file in ROOT.glob("*.pt"):
-        dest = WEIGHTS_DIR / pt_file.name
-        if not dest.exists():
-            pt_file.rename(dest)
+    """Move any stray weight files from the project root into ``weights/``."""
+    for pattern in _STRAY_WEIGHT_PATTERNS:
+        for stray in ROOT.glob(pattern):
+            dest = WEIGHTS_DIR / stray.name
+            if not dest.exists():
+                stray.rename(dest)
 
 
 def get_model_catalog(task: str) -> dict[str, str]:
