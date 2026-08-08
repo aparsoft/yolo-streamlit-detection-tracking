@@ -1,6 +1,13 @@
 # Multi-Video Detection Performance — How It Works
 
 > **YOLO Vision Studio** can run simultaneous detection/tracking across 6+ videos at low latency. This document explains every architectural decision that makes that possible.
+>
+> Scope: the `_run_multi_video_loop()` path (2+ videos selected). For the one-video path,
+> and for the transport findings the two paths share, see
+> [`single_video_performance.md`](single_video_performance.md).
+>
+> Numbers measured on an NVIDIA RTX PRO 4500 Blackwell, ultralytics 8.4.116,
+> torch 2.8.0+cu128, `yolo26n.pt`, on the clips in `videos/`.
 
 ---
 
