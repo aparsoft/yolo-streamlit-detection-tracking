@@ -23,6 +23,7 @@ def load_model(model_name: str) -> YOLO:
     path = config.resolve_model_path(model_name)
     model = YOLO(path)
     config.sweep_stray_weights()
+    _ensure_device(model)
     return model
 
 
@@ -49,6 +50,33 @@ def load_yoloe_model(model_name: str) -> YOLOE:
     path = config.resolve_model_path(model_name)
     model = YOLOE(path)
     config.sweep_stray_weights()
+    return model
+
+
+@st.cache_resource(max_entries=4, show_spinner="Encoding text prompt…")
+def _load_prompted_model(
+    task: str, model_name: str, classes: tuple[str, ...]
+) -> YOLOWorld | YOLOE:
+    """Load an open-vocabulary model with *classes* already embedded.
+
+    The prompt is part of the cache key, so the text encoder runs once per distinct
+    prompt instead of once per rerun. That matters more than it sounds: applying a
+    prompt is CPU → ``set_classes`` → CUDA, a full round trip of the weights, measured
+    at ~3.6 s on this machine. Doing it unconditionally in ``get_model_for_task`` meant
+    every confidence-slider nudge froze the app for those 3.6 s.
+
+    ``max_entries`` caps how many prompt variants stay resident — each entry is a whole
+    model on the GPU.
+    """
+    path = config.resolve_model_path(model_name)
+    model = YOLOE(path) if task == config.TASK_YOLOE else YOLOWorld(path)
+    config.sweep_stray_weights()
+
+    # CPU first so set_classes() builds the text embeddings on the device the weights
+    # are on, then move weights *and* embeddings together. See _set_world_classes.
+    model.to("cpu")
+    model.set_classes(list(classes))
+    _ensure_device(model)
     return model
 
 
@@ -130,16 +158,15 @@ def get_model_for_task(
     name = model_name or _DEFAULTS.get(task, config.DETECTION_MODEL)
 
     try:
-        if task == config.TASK_WORLD:
-            model = load_world_model(name)
-            if world_classes:
-                _set_world_classes(model, world_classes)
-            return model
-        if task == config.TASK_YOLOE:
-            model = load_yoloe_model(name)
-            if world_classes:
-                _set_yoloe_classes(model, world_classes)
-            return model
+        if task in (config.TASK_WORLD, config.TASK_YOLOE):
+            if not world_classes:
+                # No prompt yet — hand back the bare model rather than embedding "".
+                loader = (
+                    load_yoloe_model if task == config.TASK_YOLOE else load_world_model
+                )
+                return loader(name)
+            # tuple() so the prompt is hashable and the cache key is order-sensitive
+            return _load_prompted_model(task, name, tuple(world_classes))
         return load_model(name)
     except Exception as exc:
         st.error(f"❌ Failed to load model for **{task}**: {exc}")
