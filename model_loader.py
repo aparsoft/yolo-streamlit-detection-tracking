@@ -9,6 +9,9 @@ from ultralytics import YOLO, YOLOWorld, YOLOE
 
 import config
 
+# Reuse weights already in weights/ instead of re-downloading them into the CWD.
+config.use_local_weights_dir()
+
 
 @st.cache_resource
 def load_model(model_name: str) -> YOLO:
