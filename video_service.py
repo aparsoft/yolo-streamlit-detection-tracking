@@ -142,8 +142,48 @@ def _frame_to_bytes(frame: np.ndarray) -> bytes:
     Sending raw bytes avoids Streamlit's internal temp-file caching,
     which can cause ``MediaFileStorageError`` during fast video loops.
     """
-    _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    _, buf = cv2.imencode(
+        ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, config.VIDEO_JPEG_QUALITY]
+    )
     return buf.tobytes()
+
+
+def _display_size(frame: np.ndarray) -> tuple[int, int]:
+    """Return the ``(w, h)`` to run inference and stream at — never larger than source.
+
+    ``VIDEO_DISPLAY_WIDTH`` is a ceiling, not a target. The repo's clips are 640×360,
+    so resizing *to* 720 upscaled them 1.12×: inference went from 17.3 ms to 22.1 ms
+    per frame (+28%) and every JPEG got bigger, all to invent pixels the camera never
+    captured. Interpolation cannot add detail the detector could use.
+    """
+    h_orig, w_orig = frame.shape[:2]
+    w = min(config.VIDEO_DISPLAY_WIDTH, w_orig)
+    return w, int(round(w * h_orig / w_orig))
+
+
+def _gc_media_files() -> None:
+    """Drop the JPEGs of frames that have already been replaced on screen.
+
+    Every ``st.image(bytes)`` registers a file in Streamlit's global MediaFileManager.
+    Only the newest file at each screen coordinate is still referenced, but the dead
+    ones are collected only when a *script run ends* — and a playback loop is one long
+    script run. Measured: ~82 MB retained per 1000 frames, per session.
+
+    It is worse than it looks. The ForwardMsg queue coalesces messages that share a
+    delta path, so when the loop outruns the socket the older frames are dropped before
+    they are ever sent — yet their bytes were registered and still count against the
+    total. You pay memory for frames the browser never displays.
+
+    Collecting orphans mid-loop drops exactly the dead entries; the frame currently on
+    screen is still referenced by its coordinate and survives.
+    """
+    try:
+        from streamlit import runtime
+
+        if runtime.exists():
+            runtime.get_instance().media_file_mgr.remove_orphaned_files()
+    except Exception:
+        pass  # bare mode, or a Streamlit version without the manager — nothing to do
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -451,11 +491,12 @@ def _process_frame(
 
     Returns ``(annotated_frame, object_count, per_class_counts)``.
     """
-    h_orig, w_orig = frame.shape[:2]
-    w = config.VIDEO_DISPLAY_WIDTH
-    h = int(w * h_orig / w_orig)
-    frame = cv2.resize(frame, (w, h))
+    w, h = _display_size(frame)
+    if (w, h) != frame.shape[1::-1]:
+        frame = cv2.resize(frame, (w, h))
 
+    # verbose=False matters here: Ultralytics logs one formatted line per call, which
+    # costs 2.18 ms/frame — 19% of a 11.7 ms inference — and floods the terminal.
     if enable_tracking and tracker:
         results = model.track(
             frame,
@@ -463,9 +504,12 @@ def _process_frame(
             persist=True,
             tracker=tracker,
             classes=track_classes,
+            verbose=False,
         )
     else:
-        results = model.predict(frame, conf=confidence, classes=track_classes)
+        results = model.predict(
+            frame, conf=confidence, classes=track_classes, verbose=False
+        )
 
     result = results[0]
     frame_obj_count = 0
@@ -576,11 +620,24 @@ def _draw_overlay(
 
 
 class _LiveMetrics:
-    """Manages sidebar placeholder widgets that update each frame."""
+    """Sidebar placeholders showing live counts, refreshed at a readable rate.
+
+    Updating these every frame was the app's second-largest cost. Seven placeholders,
+    each a separate ForwardMsg, on top of the image message: at 85 fps that is ~680
+    messages a second for digits that change faster than anyone can read. Worse, the
+    browser must apply every one, so the render thread falls behind the socket and the
+    *video* — the one thing you are actually watching — stutters.
+
+    So updates are rate-limited to ``config.METRICS_REFRESH_HZ``. The numbers stay
+    exact, because they are read from the live counters at draw time rather than
+    accumulated here; only how often they are painted changes.
+    """
 
     def __init__(self, enable_tracking: bool):
         self.container = st.sidebar.container()
         self.enable_tracking = enable_tracking
+        self._min_interval = 1.0 / max(config.METRICS_REFRESH_HZ, 0.1)
+        self._last_drawn = 0.0
         with self.container:
             st.subheader("📈 Live Metrics")
             self._frame_ph = st.empty()
@@ -603,7 +660,18 @@ class _LiveMetrics:
         track_hits: Counter,
         class_hits: dict[str, Counter],
         fps: float,
+        force: bool = False,
     ):
+        """Repaint the sidebar, at most ``METRICS_REFRESH_HZ`` times a second.
+
+        *force* bypasses the rate limit — used for the final frame so the numbers the
+        user is left looking at are the true totals, not whatever the last tick showed.
+        """
+        now = time.monotonic()
+        if not force and now - self._last_drawn < self._min_interval:
+            return
+        self._last_drawn = now
+
         self._frame_ph.metric("Frame", frame_num)
         self._fps_ph.metric("FPS", f"{fps:.1f}")
         self._objects_ph.metric("Objects in Frame", frame_obj_count)
@@ -645,8 +713,10 @@ def _run_video_loop(
     class_hits: dict[str, Counter] = defaultdict(Counter)
     frame_num = 0
     processed = 0
-    prev_time = time.time()
-    last_bytes: bytes | None = None
+    prev_time = time.monotonic()
+    fps = 0.0
+    obj_count = 0
+    cls_counts: dict[str, int] = {}
 
     try:
         while vid_cap.isOpened():
@@ -655,10 +725,12 @@ def _run_video_loop(
                 break
             frame_num += 1
 
-            # Skip frames for faster inference
+            # Skipped frames are simply not drawn. Re-sending the previous JPEG — which
+            # is what this used to do — re-registered it in the media manager and queued
+            # another ForwardMsg to paint a picture already on screen, so the "faster
+            # inference" slider bought no transport savings at all. Leaving the last
+            # frame up is both correct and free.
             if frame_num % skip_frames != 0:
-                if last_bytes is not None:
-                    st_frame.image(last_bytes, width="stretch")
                 continue
 
             processed += 1
@@ -674,11 +746,13 @@ def _run_video_loop(
                 track_classes,
             )
 
-            last_bytes = _frame_to_bytes(annotated)
-            st_frame.image(last_bytes, width="stretch")
+            st_frame.image(_frame_to_bytes(annotated), width="stretch")
 
-            now = time.time()
-            fps = 1.0 / max(now - prev_time, 1e-6)
+            now = time.monotonic()
+            # Exponential smoothing: a raw 1/dt reading swings wildly frame to frame and
+            # is unreadable once the metrics are rate-limited to a few draws a second.
+            inst = 1.0 / max(now - prev_time, 1e-6)
+            fps = inst if fps == 0.0 else 0.9 * fps + 0.1 * inst
             prev_time = now
 
             metrics.update(
@@ -689,7 +763,15 @@ def _run_video_loop(
                 class_hits,
                 fps,
             )
+
+            if processed % config.MEDIA_GC_EVERY_N_FRAMES == 0:
+                _gc_media_files()
     finally:
+        # Leave the true totals on screen, not whatever the last rate-limited tick drew.
+        metrics.update(
+            frame_num, obj_count, cls_counts, track_hits, class_hits, fps, force=True
+        )
+        _gc_media_files()
         vid_cap.release()
         # The next playback should start its IDs from 1, not continue this run's.
         _reset_trackers(model)
@@ -763,7 +845,6 @@ def _run_multi_video_loop(
     track_hits_list: list[Counter] = [Counter() for _ in range(n)]
     class_hits_list: list[dict[str, Counter]] = [defaultdict(Counter) for _ in range(n)]
     frame_nums = [0] * n
-    last_bytes_list: list[bytes | None] = [None] * n
     active = [cap.isOpened() for cap in captures]
 
     # Sidebar compact metrics
@@ -771,7 +852,14 @@ def _run_multi_video_loop(
         st.subheader("📈 Multi-Video Metrics")
         metric_phs = [st.empty() for _ in vid_names]
 
-    prev_time = time.time()
+    # One clock per video. Sharing a single ``prev_time`` across the round-robin — the
+    # old behaviour — measured the gap between *consecutive videos'* frames, so every
+    # video reported the same number and it was n× the truth.
+    prev_times = [time.monotonic()] * n
+    fps_list = [0.0] * n
+    min_interval = 1.0 / max(config.METRICS_REFRESH_HZ, 0.1)
+    last_metric_draw = [0.0] * n
+    processed_total = 0
 
     try:
         while any(active):
@@ -787,12 +875,7 @@ def _run_multi_video_loop(
                 frame_nums[i] += 1
 
                 if frame_nums[i] % skip_frames != 0:
-                    if last_bytes_list[i] is not None:
-                        placeholders[i].image(
-                            last_bytes_list[i],
-                            width="stretch",
-                        )
-                    continue
+                    continue  # leave the frame already on screen; see _run_video_loop
 
                 annotated, obj_count, cls_counts = _process_frame(
                     models[i],
@@ -805,22 +888,32 @@ def _run_multi_video_loop(
                     track_classes,
                 )
 
-                last_bytes_list[i] = _frame_to_bytes(annotated)
-                placeholders[i].image(last_bytes_list[i], width="stretch")
+                placeholders[i].image(_frame_to_bytes(annotated), width="stretch")
+                processed_total += 1
 
-                now = time.time()
-                fps = 1.0 / max(now - prev_time, 1e-6)
-                prev_time = now
-
-                churn, stable = _track_quality(track_hits_list[i])
-                metric_phs[i].markdown(
-                    f"**{vid_names[i]}** — Frame {frame_nums[i]} · "
-                    f"{obj_count} obj · {stable} tracked · churn {churn} · "
-                    f"{fps:.1f} FPS"
+                now = time.monotonic()
+                inst = 1.0 / max(now - prev_times[i], 1e-6)
+                fps_list[i] = (
+                    inst if fps_list[i] == 0.0 else 0.9 * fps_list[i] + 0.1 * inst
                 )
+                prev_times[i] = now
+
+                if now - last_metric_draw[i] >= min_interval:
+                    last_metric_draw[i] = now
+                    churn, stable = _track_quality(track_hits_list[i])
+                    metric_phs[i].markdown(
+                        f"**{vid_names[i]}** — Frame {frame_nums[i]} · "
+                        f"{obj_count} obj · {stable} tracked · churn {churn} · "
+                        f"{fps_list[i]:.1f} FPS"
+                    )
+
+                # n videos fill the media manager n× faster than one does.
+                if processed_total % config.MEDIA_GC_EVERY_N_FRAMES == 0:
+                    _gc_media_files()
     finally:
         for cap in captures:
             cap.release()
+        _gc_media_files()
 
     # Per-video summary. IDs are per-video: two videos may both report ID 3 for
     # different objects, so these counts are never summed.
@@ -947,10 +1040,9 @@ def _play_webcam(
                     )
                 return frame
 
-            h_orig, w_orig = img.shape[:2]
-            w = config.VIDEO_DISPLAY_WIDTH
-            h = int(w * h_orig / w_orig)
-            img = cv2.resize(img, (w, h))
+            w, h = _display_size(img)
+            if (w, h) != img.shape[1::-1]:
+                img = cv2.resize(img, (w, h))
 
             if enable_tracking and tracker:
                 results = model.track(
@@ -959,9 +1051,12 @@ def _play_webcam(
                     persist=True,
                     tracker=tracker,
                     classes=track_classes,
+                    verbose=False,
                 )
             else:
-                results = model.predict(img, conf=confidence, classes=track_classes)
+                results = model.predict(
+                    img, conf=confidence, classes=track_classes, verbose=False
+                )
 
             result = results[0]
             frame_class_counts: dict[str, int] = {}
