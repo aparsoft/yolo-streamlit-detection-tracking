@@ -180,6 +180,9 @@ def render(task: str, confidence: float, selected_model: str | None = None) -> N
         _reset_trackers(model)
         st.session_state["_active_tracker"] = tracker
 
+    # Which classes to look for at all
+    track_classes = _class_filter_options(model, task)
+
     # Skip frames slider for faster inference
     skip_frames = st.sidebar.slider(
         "⏩ Skip Frames",
@@ -189,6 +192,14 @@ def render(task: str, confidence: float, selected_model: str | None = None) -> N
         help="Process every Nth frame. Higher = faster but less smooth.",
         key="skip_frames",
     )
+    if skip_frames > 1 and enable_tracking:
+        # Bigger gaps between updates means bigger jumps between boxes, which is exactly
+        # where IoU matching gives up and appearance matching earns its cost.
+        st.sidebar.caption(
+            f"Objects move ~{skip_frames}× further between updates — the case ReID "
+            "handles best. If FPS forces a choice, prefer skip=2 **with** ReID over "
+            "skip=1 without it."
+        )
 
     # Dispatch — pass task, world_classes & selected_model for multi-video isolation
     _SOURCE_HANDLERS[source](
@@ -200,6 +211,7 @@ def render(task: str, confidence: float, selected_model: str | None = None) -> N
         task,
         world_classes,
         selected_model,
+        track_classes=track_classes,
     )
 
 
@@ -248,6 +260,38 @@ def _world_class_input() -> list[str] | None:
 
 
 # ── Tracking config ──────────────────────────────────────────────────────────
+
+
+def _class_filter_options(model, task: str) -> list[int] | None:
+    """Sidebar multiselect limiting inference to a subset of the model's classes.
+
+    Returns class **indices** for ``predict(classes=...)`` / ``track(classes=...)``, or
+    ``None`` for "everything". Narrowing here is the cheapest optimisation in the app:
+    dropped classes cost no annotation, no counting, and — with ReID enabled — no crop
+    and no embedding, which is the expensive part.
+
+    Skipped for YOLO World / YOLOE, whose vocabulary is the text prompt itself.
+    """
+    if task in (config.TASK_WORLD, config.TASK_YOLOE):
+        return None
+
+    names = getattr(model, "names", None)
+    if not names:
+        return None
+
+    chosen = st.sidebar.multiselect(
+        "🎯 Limit to classes",
+        options=sorted(names.values()),
+        default=[],
+        help="Leave empty to detect everything. Narrowing costs nothing and saves "
+        "annotation, counting and (with ReID) one embedding per detection.",
+        key="track_classes",
+    )
+    if not chosen:
+        return None
+
+    wanted = set(chosen)
+    return sorted(idx for idx, name in names.items() if name in wanted)
 
 
 def _reset_trackers(model) -> None:
@@ -397,11 +441,13 @@ def _process_frame(
     tracker: str | None,
     track_hits: Counter,
     class_hits: dict[str, Counter],
+    track_classes: list[int] | None = None,
 ) -> tuple[np.ndarray, int, dict[str, int]]:
     """Run inference on a single frame.
 
     *track_hits* and *class_hits* accumulate **how many frames each track ID was seen
     in**, not merely that it existed — see :func:`_confirmed`.
+    *track_classes* limits inference to those class indices (``None`` = all).
 
     Returns ``(annotated_frame, object_count, per_class_counts)``.
     """
@@ -411,9 +457,15 @@ def _process_frame(
     frame = cv2.resize(frame, (w, h))
 
     if enable_tracking and tracker:
-        results = model.track(frame, conf=confidence, persist=True, tracker=tracker)
+        results = model.track(
+            frame,
+            conf=confidence,
+            persist=True,
+            tracker=tracker,
+            classes=track_classes,
+        )
     else:
-        results = model.predict(frame, conf=confidence)
+        results = model.predict(frame, conf=confidence, classes=track_classes)
 
     result = results[0]
     frame_obj_count = 0
@@ -580,6 +632,7 @@ def _run_video_loop(
     enable_tracking: bool,
     tracker: str | None,
     skip_frames: int = 1,
+    track_classes: list[int] | None = None,
 ) -> None:
     """Common processing loop for any ``cv2.VideoCapture`` source."""
     if not vid_cap.isOpened():
@@ -618,6 +671,7 @@ def _run_video_loop(
                 tracker,
                 track_hits,
                 class_hits,
+                track_classes,
             )
 
             last_bytes = _frame_to_bytes(annotated)
@@ -679,6 +733,7 @@ def _run_multi_video_loop(
     task: str,
     world_classes: list[str] | None,
     selected_model: str | None = None,
+    track_classes: list[int] | None = None,
 ) -> None:
     """Process multiple videos simultaneously in side-by-side columns.
 
@@ -747,6 +802,7 @@ def _run_multi_video_loop(
                     tracker,
                     track_hits_list[i],
                     class_hits_list[i],
+                    track_classes,
                 )
 
                 last_bytes_list[i] = _frame_to_bytes(annotated)
@@ -788,6 +844,7 @@ def _play_stored_video(
     task: str,
     world_classes: list[str] | None,
     selected_model: str | None = None,
+    track_classes: list[int] | None = None,
 ) -> None:
     # Scan videos/ on every run so newly added files appear immediately
     videos = config.get_videos_dict()
@@ -826,6 +883,7 @@ def _play_stored_video(
                 enable_tracking,
                 tracker,
                 skip_frames,
+                track_classes,
             )
         else:
             _run_multi_video_loop(
@@ -838,6 +896,7 @@ def _play_stored_video(
                 task,
                 world_classes,
                 selected_model,
+                track_classes,
             )
 
 
@@ -850,6 +909,7 @@ def _play_webcam(
     task: str,
     world_classes: list[str] | None,
     selected_model: str | None = None,
+    track_classes: list[int] | None = None,
 ) -> None:
     """Browser-based webcam via streamlit-webrtc (works locally + cloud)."""
     try:
@@ -894,10 +954,14 @@ def _play_webcam(
 
             if enable_tracking and tracker:
                 results = model.track(
-                    img, conf=confidence, persist=True, tracker=tracker
+                    img,
+                    conf=confidence,
+                    persist=True,
+                    tracker=tracker,
+                    classes=track_classes,
                 )
             else:
-                results = model.predict(img, conf=confidence)
+                results = model.predict(img, conf=confidence, classes=track_classes)
 
             result = results[0]
             frame_class_counts: dict[str, int] = {}
@@ -948,6 +1012,7 @@ def _play_rtsp(
     task: str,
     world_classes: list[str] | None,
     selected_model: str | None = None,
+    track_classes: list[int] | None = None,
 ) -> None:
     url = st.sidebar.text_input(
         "RTSP Stream URL",
@@ -964,6 +1029,7 @@ def _play_rtsp(
             enable_tracking,
             tracker,
             skip_frames,
+            track_classes,
         )
 
 
@@ -976,6 +1042,7 @@ def _play_youtube(
     task: str,
     world_classes: list[str] | None,
     selected_model: str | None = None,
+    track_classes: list[int] | None = None,
 ) -> None:
     url = st.sidebar.text_input(
         "YouTube URL", placeholder="https://www.youtube.com/watch?v=..."
@@ -995,6 +1062,7 @@ def _play_youtube(
                 enable_tracking,
                 tracker,
                 skip_frames,
+                track_classes,
             )
         except Exception as exc:
             st.sidebar.error(f"YouTube error: {exc}")
