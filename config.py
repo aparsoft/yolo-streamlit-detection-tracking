@@ -133,8 +133,25 @@ DEFAULT_CONFIDENCE = 0.40
 DEFAULT_IOU = 0.50
 MIN_CONFIDENCE = 10  # slider min (%)
 MAX_CONFIDENCE = 100  # slider max (%)
-VIDEO_DISPLAY_WIDTH = 720
+VIDEO_DISPLAY_WIDTH = 720  # a *ceiling*, never a target — see _display_size()
 WEBCAM_PATH = 0
+
+# ─── Video Streaming Budget ──────────────────────────────────────────────────
+# A playback loop lives inside one Streamlit script run, and the parts of Streamlit
+# that reclaim memory and flush the socket only run *between* script runs. Everything
+# below exists to keep one long run from starving them.
+
+# JPEG quality for streamed frames. 90 → 82 KB/frame, 75 → 51 KB/frame at 720p; the
+# difference is invisible on an annotated frame and it is 38% less to push per frame.
+VIDEO_JPEG_QUALITY = 75
+
+# Sidebar metrics refresh rate. Each update is ~7 ForwardMsgs; at 85 fps that is 600
+# messages/s the browser must apply, for numbers no one can read that fast.
+METRICS_REFRESH_HZ = 5.0
+
+# How often to collect the JPEGs of frames already replaced on screen. Streamlit only
+# does this when a script run ends, so a 1000-frame video otherwise holds ~80 MB.
+MEDIA_GC_EVERY_N_FRAMES = 30
 
 # ─── Skip Frames ─────────────────────────────────────────────────────────────
 DEFAULT_SKIP_FRAMES = 1  # process every frame
