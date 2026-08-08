@@ -4,8 +4,9 @@ Video inference service — Stored videos, Webcam, RTSP & YouTube.
 Features
 --------
 * Object detection, segmentation, YOLO World v2 & pose estimation
-* ByteTrack / BoTSORT tracking with per-box track IDs (class | conf | ID:N)
-* Local (per-frame) + Global (cumulative) tracking metrics
+* ByteTrack / BoT-SORT / Deep OC-SORT / TrackTrack with per-box IDs (class | conf | ID:N)
+* Optional appearance ReID (BoT-SORT family) with sidebar-tunable gates
+* Local (per-frame) + Global (confirmed-only) counts + track-quality metrics
 * Skip-frames slider for faster inferencing
 * Multi-video simultaneous detection in side-by-side columns
 * Browser-based webcam via streamlit-webrtc
@@ -13,17 +14,21 @@ Features
 
 from __future__ import annotations
 
+import hashlib
+import tempfile
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
+from pathlib import Path
 
 import cv2
 import numpy as np
 import streamlit as st
+import yaml
 import yt_dlp
+from ultralytics.utils import YAML
 
 import config
 from model_loader import get_model_for_task, load_fresh_model
-
 
 # ── Track-ID colour palette (16 distinct BGR colours) ────────────────────────
 
@@ -169,6 +174,12 @@ def render(task: str, confidence: float, selected_model: str | None = None) -> N
     # Tracking options (enabled by default)
     enable_tracking, tracker = _tracker_options()
 
+    # Trackers are built once and cached along with the model, so a changed tracker or
+    # a changed ReID setting only takes effect if we drop the existing ones.
+    if st.session_state.get("_active_tracker") != tracker:
+        _reset_trackers(model)
+        st.session_state["_active_tracker"] = tracker
+
     # Skip frames slider for faster inference
     skip_frames = st.sidebar.slider(
         "⏩ Skip Frames",
@@ -239,20 +250,143 @@ def _world_class_input() -> list[str] | None:
 # ── Tracking config ──────────────────────────────────────────────────────────
 
 
+def _reset_trackers(model) -> None:
+    """Force Ultralytics to rebuild trackers from the YAML on the next ``track()`` call.
+
+    Tracker objects are created once in ``on_predict_start`` and reused for as long as
+    ``persist=True``, so a changed YAML — or a different tracker entirely — is otherwise
+    silently ignored. Our models are ``@st.cache_resource``d, so they survive every
+    Streamlit rerun and would keep the tracker chosen on the very first run forever.
+    """
+    predictor = getattr(model, "predictor", None)
+    if predictor is not None and hasattr(predictor, "trackers"):
+        del predictor.trackers
+
+
+def _tracker_defaults(tracker_yaml: str) -> dict:
+    """Load the packaged defaults for a tracker (``bytetrack.yaml``, ``botsort.yaml``…)."""
+    import ultralytics
+
+    return YAML.load(
+        Path(ultralytics.__file__).parent / "cfg" / "trackers" / tracker_yaml
+    )
+
+
+def _build_tracker_yaml(tracker_yaml: str, overrides: dict) -> str:
+    """Write a tracker config with *overrides* applied and return its path.
+
+    Ultralytics accepts a path anywhere it accepts a tracker name, so sidebar settings
+    become a real YAML file. The filename hashes the settings: identical settings reuse
+    one file, and a changed setting produces a new path — which is also how
+    ``_reset_trackers`` knows something changed.
+    """
+    cfg = _tracker_defaults(tracker_yaml)
+    cfg.update(overrides)
+    key = hashlib.md5(repr(sorted(cfg.items())).encode()).hexdigest()[:8]
+    path = Path(tempfile.gettempdir()) / f"yolo_studio_{cfg['tracker_type']}_{key}.yaml"
+    if not path.exists():
+        path.write_text(yaml.safe_dump(cfg, sort_keys=False))
+    return str(path)
+
+
 def _tracker_options() -> tuple[bool, str | None]:
-    """Sidebar widgets for tracker selection."""
+    """Sidebar widgets for tracker selection, ReID and its thresholds.
+
+    Returns ``(enable_tracking, tracker)`` where *tracker* is either a packaged name
+    (``"bytetrack.yaml"``) or the path of a generated config — ``model.track()``
+    takes both.
+    """
     enable = st.sidebar.checkbox("Enable Object Tracking", value=True)
-    tracker = None
-    if enable:
-        tracker = st.sidebar.radio(
-            "Tracker Algorithm",
-            config.TRACKERS_LIST,
-            key="tracker_algo",
-        )
-    return enable, tracker
+    if not enable:
+        return False, None
+
+    tracker = st.sidebar.radio(
+        "Tracker Algorithm",
+        config.TRACKERS_LIST,
+        key="tracker_algo",
+    )
+
+    overrides: dict = {}
+    if tracker != config.TRACKER_BYTETRACK:
+        # Camera-motion compensation costs ~10 ms/frame and buys nothing on fixed cameras.
+        overrides["gmc_method"] = config.GMC_METHOD
+
+    if tracker in config.REID_CAPABLE_TRACKERS:
+        if st.sidebar.checkbox(
+            "🧬 Appearance ReID",
+            value=False,
+            key="use_reid",
+            help="Match objects by how they look, not only by where they are. Recovers "
+            "IDs through occlusion — and costs roughly two-thirds of your FPS.",
+        ):
+            encoder = st.sidebar.selectbox(
+                "ReID encoder",
+                list(config.REID_ENCODER_CHOICES),
+                key="reid_encoder",
+            )
+            overrides |= {
+                "with_reid": True,
+                "model": config.REID_ENCODER_CHOICES[encoder],
+                "proximity_thresh": st.sidebar.slider(
+                    "Proximity gate (IoU)",
+                    0.10,
+                    0.90,
+                    config.REID_PROXIMITY_THRESH,
+                    0.05,
+                    help="Lower lets appearance rescue boxes that moved further — better "
+                    "through occlusion, but too low merges different objects.",
+                ),
+                "appearance_thresh": st.sidebar.slider(
+                    "Appearance gate",
+                    0.30,
+                    0.95,
+                    config.REID_APPEARANCE_THRESH,
+                    0.05,
+                    help="Lower accepts weaker look-alike matches.",
+                ),
+                "track_buffer": st.sidebar.slider(
+                    "Lost-track memory (frames)",
+                    30,
+                    150,
+                    config.REID_TRACK_BUFFER,
+                    10,
+                    help="How long a vanished track stays re-findable. Only useful "
+                    "together with ReID.",
+                ),
+            }
+            st.sidebar.caption(
+                "⚠️ The local -cls encoder recovers occlusions but cannot reliably tell "
+                "two similar people apart. Use a -reid encoder for that."
+            )
+
+    if not overrides:
+        return True, tracker
+    return True, _build_tracker_yaml(tracker, overrides)
 
 
 # ── Frame processor ──────────────────────────────────────────────────────────
+
+
+def _confirmed(track_hits: Counter, min_hits: int = config.MIN_TRACK_HITS) -> set[int]:
+    """Track IDs seen at least *min_hits* times — the ones worth reporting.
+
+    A tracker hands out an ID the moment it sees something; plenty of those live for a
+    frame or two (a chair that briefly looked like a person). Counting every ID ever
+    issued is how "unique objects" ends up two to three times the truth.
+    """
+    return {tid for tid, hits in track_hits.items() if hits >= min_hits}
+
+
+def _track_quality(track_hits: Counter) -> tuple[float, int]:
+    """Return ``(churn, stable_tracks)``.
+
+    ``churn = max_id / unique_ids``. 1.0 is perfect. 2.5 means the tracker issued two
+    and a half IDs for every object it actually followed — fragmentation, which is
+    exactly what appearance ReID is there to fix. Watch it while tuning the sliders.
+    """
+    if not track_hits:
+        return 0.0, 0
+    return round(max(track_hits) / len(track_hits), 2), len(_confirmed(track_hits))
 
 
 def _process_frame(
@@ -261,10 +395,13 @@ def _process_frame(
     confidence: float,
     enable_tracking: bool,
     tracker: str | None,
-    tracked_ids: set[int],
-    class_tracked: dict[str, set[int]],
+    track_hits: Counter,
+    class_hits: dict[str, Counter],
 ) -> tuple[np.ndarray, int, dict[str, int]]:
     """Run inference on a single frame.
+
+    *track_hits* and *class_hits* accumulate **how many frames each track ID was seen
+    in**, not merely that it existed — see :func:`_confirmed`.
 
     Returns ``(annotated_frame, object_count, per_class_counts)``.
     """
@@ -291,13 +428,13 @@ def _process_frame(
             name = names[int(cls_id)]
             frame_class_counts[name] = frame_class_counts.get(name, 0) + 1
 
-        # Accumulate unique tracked IDs
+        # Accumulate per-ID frame counts
         if enable_tracking and result.boxes.id is not None:
             ids = result.boxes.id.cpu().numpy()
             for track_id, cls_id in zip(ids, classes):
-                tracked_ids.add(int(track_id))
+                track_hits[int(track_id)] += 1
                 name = names[int(cls_id)]
-                class_tracked.setdefault(name, set()).add(int(track_id))
+                class_hits.setdefault(name, Counter())[int(track_id)] += 1
 
     # Custom annotation with track IDs on bounding boxes
     annotated = _annotate_with_ids(frame, result, enable_tracking)
@@ -307,8 +444,9 @@ def _process_frame(
         annotated,
         frame_obj_count,
         frame_class_counts,
-        len(tracked_ids) if enable_tracking else None,
-        class_tracked if enable_tracking else None,
+        len(_confirmed(track_hits)) if enable_tracking else None,
+        class_hits if enable_tracking else None,
+        _track_quality(track_hits) if enable_tracking else None,
     )
     return annotated, frame_obj_count, frame_class_counts
 
@@ -318,9 +456,10 @@ def _draw_overlay(
     total: int,
     class_counts: dict[str, int],
     tracked_total: int | None = None,
-    class_tracked: dict[str, set[int]] | None = None,
+    class_hits: dict[str, Counter] | None = None,
+    quality: tuple[float, int] | None = None,
 ) -> np.ndarray:
-    """Draw local (per-frame) + global (cumulative) tracking overlay."""
+    """Draw local (per-frame) + global (cumulative) + track-quality overlay."""
     font = cv2.FONT_HERSHEY_SIMPLEX
     scale, thickness = 0.45, 1
     y_offset = 5
@@ -335,13 +474,20 @@ def _draw_overlay(
         local_parts.append(f"{name}: {cnt}")
     lines.append(" | ".join(local_parts))
 
-    # ── Global (cumulative tracked) ───────────────────────
+    # ── Global (cumulative tracked, confirmed only) ───────
     if tracked_total is not None:
         global_parts = [f"Total Tracked: {tracked_total}"]
-        if class_tracked:
-            for name, ids in list(class_tracked.items())[:5]:
-                global_parts.append(f"{name}: {len(ids)}")
+        if class_hits:
+            for name, hits in list(class_hits.items())[:5]:
+                global_parts.append(f"{name}: {len(_confirmed(hits))}")
         lines.append(" | ".join(global_parts))
+
+    # ── Track quality — is the tracker fragmenting? ───────
+    if quality is not None:
+        churn, stable = quality
+        lines.append(
+            f"Churn: {churn} | Stable: {stable} | Min hits: {config.MIN_TRACK_HITS}"
+        )
 
     # Compute box size
     max_tw = 0
@@ -356,8 +502,11 @@ def _draw_overlay(
     cv2.rectangle(overlay, (5, 5), (box_w + 5, box_h + 5), (0, 0, 0), -1)
     cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
 
+    # green = local, yellow = global, grey = track quality
+    _LINE_COLORS = [(0, 255, 0), (0, 200, 255), (200, 200, 200)]
+
     for i, line in enumerate(lines):
-        color = (0, 255, 0) if i == 0 else (0, 200, 255)  # green local, yellow global
+        color = _LINE_COLORS[min(i, len(_LINE_COLORS) - 1)]
         cv2.putText(
             frame,
             line,
@@ -391,14 +540,16 @@ class _LiveMetrics:
                 st.markdown("**🟡 Global (cumulative)**")
                 self._tracked_ph = st.empty()
                 self._global_classes_ph = st.empty()
+                st.markdown("**⚪ Track quality**")
+                self._quality_ph = st.empty()
 
     def update(
         self,
         frame_num: int,
         frame_obj_count: int,
         frame_class_counts: dict[str, int],
-        tracked_total: int,
-        class_tracked: dict[str, set[int]],
+        track_hits: Counter,
+        class_hits: dict[str, Counter],
         fps: float,
     ):
         self._frame_ph.metric("Frame", frame_num)
@@ -407,11 +558,16 @@ class _LiveMetrics:
         local_str = " · ".join(f"**{k}**: {v}" for k, v in frame_class_counts.items())
         self._classes_ph.markdown(local_str or "—")
         if self.enable_tracking:
-            self._tracked_ph.metric("Total Unique Objects", tracked_total)
+            churn, stable = _track_quality(track_hits)
+            self._tracked_ph.metric("Total Unique Objects", stable)
             global_str = " · ".join(
-                f"**{k}**: {len(ids)}" for k, ids in class_tracked.items()
+                f"**{k}**: {len(_confirmed(hits))}" for k, hits in class_hits.items()
             )
             self._global_classes_ph.markdown(global_str or "—")
+            self._quality_ph.markdown(
+                f"Churn **{churn}** · IDs issued **{len(track_hits)}** · "
+                f"counted after **{config.MIN_TRACK_HITS}** frames"
+            )
 
 
 # ── Single-video capture loop ────────────────────────────────────────────────
@@ -432,8 +588,8 @@ def _run_video_loop(
 
     metrics = _LiveMetrics(enable_tracking)
     st_frame = st.empty()
-    tracked_ids: set[int] = set()
-    class_tracked: dict[str, set[int]] = defaultdict(set)
+    track_hits: Counter = Counter()  # track_id -> frames seen
+    class_hits: dict[str, Counter] = defaultdict(Counter)
     frame_num = 0
     processed = 0
     prev_time = time.time()
@@ -460,8 +616,8 @@ def _run_video_loop(
                 confidence,
                 enable_tracking,
                 tracker,
-                tracked_ids,
-                class_tracked,
+                track_hits,
+                class_hits,
             )
 
             last_bytes = _frame_to_bytes(annotated)
@@ -475,12 +631,14 @@ def _run_video_loop(
                 frame_num,
                 obj_count,
                 cls_counts,
-                len(tracked_ids),
-                class_tracked,
+                track_hits,
+                class_hits,
                 fps,
             )
     finally:
         vid_cap.release()
+        # The next playback should start its IDs from 1, not continue this run's.
+        _reset_trackers(model)
 
     # Final summary
     skipped = frame_num - processed
@@ -488,15 +646,22 @@ def _run_video_loop(
     if skipped:
         summary_parts.append(f"**{skipped}** skipped")
 
-    if enable_tracking and tracked_ids:
+    if enable_tracking and track_hits:
+        churn, stable = _track_quality(track_hits)
         st.success(
             f"✅ {' · '.join(summary_parts)} — "
-            f"**{len(tracked_ids)}** unique objects tracked"
+            f"**{stable}** unique objects tracked "
+            f"(seen ≥{config.MIN_TRACK_HITS} frames)"
         )
         with st.expander("📊 Tracking Summary", expanded=True):
-            cols = st.columns(min(len(class_tracked), 4) or 1)
-            for idx, (name, ids) in enumerate(class_tracked.items()):
-                cols[idx % len(cols)].metric(name.capitalize(), len(ids))
+            cols = st.columns(min(len(class_hits), 4) or 1)
+            for idx, (name, hits) in enumerate(class_hits.items()):
+                cols[idx % len(cols)].metric(name.capitalize(), len(_confirmed(hits)))
+            st.caption(
+                f"{len(track_hits)} IDs issued, {stable} confirmed · churn {churn} "
+                "(1.0 = every ID followed one object; higher means tracks broke and "
+                "re-registered — try a ReID tracker)."
+            )
     else:
         st.success(f"✅ {' · '.join(summary_parts)}")
 
@@ -540,10 +705,8 @@ def _run_multi_video_loop(
                 placeholders.append(st.empty())
 
     captures = [cv2.VideoCapture(str(videos[nm])) for nm in vid_names]
-    tracked_sets: list[set[int]] = [set() for _ in range(n)]
-    class_tracked_dicts: list[dict[str, set[int]]] = [
-        defaultdict(set) for _ in range(n)
-    ]
+    track_hits_list: list[Counter] = [Counter() for _ in range(n)]
+    class_hits_list: list[dict[str, Counter]] = [defaultdict(Counter) for _ in range(n)]
     frame_nums = [0] * n
     last_bytes_list: list[bytes | None] = [None] * n
     active = [cap.isOpened() for cap in captures]
@@ -582,8 +745,8 @@ def _run_multi_video_loop(
                     confidence,
                     enable_tracking,
                     tracker,
-                    tracked_sets[i],
-                    class_tracked_dicts[i],
+                    track_hits_list[i],
+                    class_hits_list[i],
                 )
 
                 last_bytes_list[i] = _frame_to_bytes(annotated)
@@ -593,21 +756,23 @@ def _run_multi_video_loop(
                 fps = 1.0 / max(now - prev_time, 1e-6)
                 prev_time = now
 
+                churn, stable = _track_quality(track_hits_list[i])
                 metric_phs[i].markdown(
                     f"**{vid_names[i]}** — Frame {frame_nums[i]} · "
-                    f"{obj_count} obj · {len(tracked_sets[i])} tracked · "
+                    f"{obj_count} obj · {stable} tracked · churn {churn} · "
                     f"{fps:.1f} FPS"
                 )
     finally:
         for cap in captures:
             cap.release()
 
-    # Per-video summary
+    # Per-video summary. IDs are per-video: two videos may both report ID 3 for
+    # different objects, so these counts are never summed.
     for i, name in enumerate(vid_names):
-        t = tracked_sets[i]
+        churn, stable = _track_quality(track_hits_list[i])
         st.success(
             f"✅ **{name}**: {frame_nums[i]} frames"
-            + (f" — **{len(t)}** unique objects" if t else "")
+            + (f" — **{stable}** unique objects · churn {churn}" if stable else "")
         )
 
 
@@ -702,8 +867,8 @@ def _play_webcam(
         "Your browser will ask for camera permission — please allow it."
     )
 
-    tracked_ids_global: set[int] = set()
-    class_tracked_global: dict[str, set[int]] = defaultdict(set)
+    track_hits_global: Counter = Counter()
+    class_hits_global: dict[str, Counter] = defaultdict(Counter)
 
     class YOLOVideoProcessor(VideoProcessorBase):
         def __init__(self):
@@ -748,17 +913,20 @@ def _play_webcam(
                 if enable_tracking and result.boxes.id is not None:
                     ids = result.boxes.id.cpu().numpy()
                     for track_id, cls_id in zip(ids, classes):
-                        tracked_ids_global.add(int(track_id))
+                        track_hits_global[int(track_id)] += 1
                         name = names[int(cls_id)]
-                        class_tracked_global.setdefault(name, set()).add(int(track_id))
+                        class_hits_global.setdefault(name, Counter())[
+                            int(track_id)
+                        ] += 1
 
             annotated = _annotate_with_ids(img, result, enable_tracking)
             annotated = _draw_overlay(
                 annotated,
                 len(result.boxes) if result.boxes is not None else 0,
                 frame_class_counts,
-                len(tracked_ids_global) if enable_tracking else None,
-                class_tracked_global if enable_tracking else None,
+                len(_confirmed(track_hits_global)) if enable_tracking else None,
+                class_hits_global if enable_tracking else None,
+                _track_quality(track_hits_global) if enable_tracking else None,
             )
             self.last_annotated = annotated
             return av.VideoFrame.from_ndarray(annotated, format="bgr24")
