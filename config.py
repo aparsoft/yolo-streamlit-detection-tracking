@@ -149,6 +149,16 @@ VIDEO_JPEG_QUALITY = 75
 # messages/s the browser must apply, for numbers no one can read that fast.
 METRICS_REFRESH_HZ = 5.0
 
+# Ceiling on how many frames a second are *painted*. Inference still runs on every frame
+# the skip-frames slider allows, so tracking quality is untouched — this only limits how
+# many of those results are pushed to the browser.
+#
+# The two rates were the same number before, which is why playback stuttered: the loop
+# produced ~78 fps of distinct JPEGs and each one costs the browser a ForwardMsg *and* a
+# separate GET of /media/<hash>.jpg. Nothing in a human eye needs 78; capping at 30
+# roughly halves the browser's work without dropping a single detection.
+VIDEO_DISPLAY_FPS = 30.0
+
 # How often to collect the JPEGs of frames already replaced on screen. Streamlit only
 # does this when a script run ends, so a 1000-frame video otherwise holds ~80 MB.
 MEDIA_GC_EVERY_N_FRAMES = 30
