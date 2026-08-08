@@ -178,7 +178,12 @@ class _DisplayThrottle:
     transport relief by throwing away detections.
     """
 
-    def __init__(self, max_fps: float = config.VIDEO_DISPLAY_FPS):
+    def __init__(self, max_fps: float | None = None):
+        # Read the config at call time, not as a default argument — a default is bound
+        # once at import, so editing config.VIDEO_DISPLAY_FPS afterwards would silently
+        # do nothing.
+        if max_fps is None:
+            max_fps = config.VIDEO_DISPLAY_FPS
         self._interval = 1.0 / max_fps if max_fps and max_fps > 0 else 0.0
         self._last = 0.0
 
