@@ -161,6 +161,36 @@ def _display_size(frame: np.ndarray) -> tuple[int, int]:
     return w, int(round(w * h_orig / w_orig))
 
 
+class _DisplayThrottle:
+    """Decides which inferred frames are actually painted.
+
+    Inference rate and display rate are two different requirements and used to be one
+    number. Tracking wants every frame it can get — a Kalman filter's association step
+    degrades as the gap between observations grows. A viewer wants about 30 fps and
+    cannot perceive more.
+
+    Sending all ~78 inferred fps meant ~78 ForwardMsgs *and* ~78 browser GETs of
+    ``/media/<hash>.jpg`` every second, because each frame is a distinct content hash and
+    therefore a guaranteed cache miss. Capping the paint rate cuts that roughly in half
+    while every frame still goes through the detector and the counters.
+
+    This is strictly better than reaching for ⏩ Skip Frames, which buys the same
+    transport relief by throwing away detections.
+    """
+
+    def __init__(self, max_fps: float = config.VIDEO_DISPLAY_FPS):
+        self._interval = 1.0 / max_fps if max_fps and max_fps > 0 else 0.0
+        self._last = 0.0
+
+    def ready(self, now: float) -> bool:
+        if self._interval <= 0.0:  # 0/None disables the cap
+            return True
+        if now - self._last < self._interval:
+            return False
+        self._last = now
+        return True
+
+
 def _gc_media_files() -> None:
     """Drop the JPEGs of frames that have already been replaced on screen.
 
@@ -716,7 +746,10 @@ def _run_video_loop(
     prev_time = time.monotonic()
     fps = 0.0
     obj_count = 0
+    painted = 0
     cls_counts: dict[str, int] = {}
+    throttle = _DisplayThrottle()
+    pending: np.ndarray | None = None
 
     try:
         while vid_cap.isOpened():
@@ -746,9 +779,15 @@ def _run_video_loop(
                 track_classes,
             )
 
-            st_frame.image(_frame_to_bytes(annotated), width="stretch")
-
             now = time.monotonic()
+            # Every frame is inferred and counted; only the painted ones are capped.
+            if throttle.ready(now):
+                st_frame.image(_frame_to_bytes(annotated), width="stretch")
+                painted += 1
+                pending = None
+            else:
+                pending = annotated  # so the video does not end on a stale frame
+
             # Exponential smoothing: a raw 1/dt reading swings wildly frame to frame and
             # is unreadable once the metrics are rate-limited to a few draws a second.
             inst = 1.0 / max(now - prev_time, 1e-6)
@@ -767,7 +806,10 @@ def _run_video_loop(
             if processed % config.MEDIA_GC_EVERY_N_FRAMES == 0:
                 _gc_media_files()
     finally:
-        # Leave the true totals on screen, not whatever the last rate-limited tick drew.
+        # Leave the true totals and the true last frame on screen, not whatever the last
+        # rate-limited tick happened to catch.
+        if pending is not None:
+            st_frame.image(_frame_to_bytes(pending), width="stretch")
         metrics.update(
             frame_num, obj_count, cls_counts, track_hits, class_hits, fps, force=True
         )
@@ -781,6 +823,9 @@ def _run_video_loop(
     summary_parts = [f"**{frame_num}** frames read", f"**{processed}** processed"]
     if skipped:
         summary_parts.append(f"**{skipped}** skipped")
+    if painted < processed:
+        # Not a loss: these frames were detected and counted, just not all painted.
+        summary_parts.append(f"**{painted}** drawn (≤{config.VIDEO_DISPLAY_FPS:g} fps)")
 
     if enable_tracking and track_hits:
         churn, stable = _track_quality(track_hits)
@@ -860,6 +905,8 @@ def _run_multi_video_loop(
     min_interval = 1.0 / max(config.METRICS_REFRESH_HZ, 0.1)
     last_metric_draw = [0.0] * n
     processed_total = 0
+    # One cap per video: n videos sharing one would let a fast clip starve a slow one.
+    throttles = [_DisplayThrottle() for _ in range(n)]
 
     try:
         while any(active):
@@ -888,10 +935,11 @@ def _run_multi_video_loop(
                     track_classes,
                 )
 
-                placeholders[i].image(_frame_to_bytes(annotated), width="stretch")
-                processed_total += 1
-
                 now = time.monotonic()
+                if throttles[i].ready(now):
+                    placeholders[i].image(_frame_to_bytes(annotated), width="stretch")
+                    processed_total += 1
+
                 inst = 1.0 / max(now - prev_times[i], 1e-6)
                 fps_list[i] = (
                     inst if fps_list[i] == 0.0 else 0.9 * fps_list[i] + 0.1 * inst
