@@ -144,7 +144,44 @@ MAX_SKIP_FRAMES = 8
 # ─── Tracker Config ──────────────────────────────────────────────────────────
 TRACKER_BYTETRACK = "bytetrack.yaml"
 TRACKER_BOTSORT = "botsort.yaml"
-TRACKERS_LIST = [TRACKER_BYTETRACK, TRACKER_BOTSORT]
+TRACKER_DEEPOCSORT = "deepocsort.yaml"
+TRACKER_TRACKTRACK = "tracktrack.yaml"
+TRACKER_OCSORT = "ocsort.yaml"
+TRACKER_FASTTRACK = "fasttrack.yaml"
+
+TRACKERS_LIST = [
+    TRACKER_BYTETRACK,
+    TRACKER_BOTSORT,
+    TRACKER_DEEPOCSORT,
+    TRACKER_TRACKTRACK,
+]
+
+# Trackers whose YAML has a ``with_reid`` switch (appearance matching).
+REID_CAPABLE_TRACKERS = {TRACKER_BOTSORT, TRACKER_DEEPOCSORT, TRACKER_TRACKTRACK}
+
+# ─── ReID (appearance re-identification) ─────────────────────────────────────
+# ReID gives the tracker a second opinion: instead of "is this box where the last
+# one was?" it can also ask "does this crop look like that object?" — which is how
+# an ID survives an occlusion. It costs an extra forward pass per detection crop.
+#
+# ``model: auto`` is documented as "use the detector's own features", but that path
+# needs a non-end2end head. YOLO26 is NMS-free (end2end=True), so auto silently
+# falls back to yolo26n-cls.pt. We name that file explicitly: no surprise download,
+# and it already sits in weights/.
+REID_ENCODER_CHOICES = {
+    "yolo26n-cls (local, weak)": str(WEIGHTS_DIR / "yolo26n-cls.pt"),
+    "yolo26s-reid.onnx (needs onnxruntime)": "yolo26s-reid.onnx",
+    "detector features (auto)": "auto",
+}
+REID_ENCODER = str(WEIGHTS_DIR / "yolo26n-cls.pt")
+REID_PROXIMITY_THRESH = 0.30  # min IoU before appearance votes (lower = more rescues)
+REID_APPEARANCE_THRESH = 0.55  # min appearance similarity (lower = more rescues)
+REID_TRACK_BUFFER = 60  # frames a lost track stays re-findable
+GMC_METHOD = "none"  # camera-motion compensation; "sparseOptFlow" if the camera moves
+
+# A track must be seen this many frames before it counts as a real object. Without
+# it every one-frame false positive inflates the "unique objects" headline number.
+MIN_TRACK_HITS = 5
 
 # ─── YOLO World v2 Defaults ───────────────────────────────────────────────────
 # Supports natural language prompts like "person in black", "red car", etc.
