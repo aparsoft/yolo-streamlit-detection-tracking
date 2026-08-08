@@ -153,36 +153,28 @@ YOLO26 (Ultralytics v8.3+) is a pure **CNN single-shot detector**. Key propertie
 |---|---|
 | Single forward pass detects all objects | No region-proposal overhead |
 | Nano/small variants < 4 M parameters | Fits entirely in L2/L3 GPU cache |
-| FP16 inference on CUDA | 2× throughput vs FP32 |
-| Anchor-free head | Fewer post-processing steps |
+| NMS-free one-to-one head | Fewer post-processing steps |
 
-On an NVIDIA GPU with YOLO26-nano, a 720×720 frame takes **≈ 5–8 ms** per inference. With 6 videos and skip=1 that is ~36–48 ms per full round-robin cycle — comfortably over 20 FPS displayed per video.
+Measured on this machine with YOLO26-nano at 640×360, `verbose=False`: **9.52 ms** per inference, and 10.86 ms including tracking. With 6 videos at skip=1 that is ~65 ms per full round-robin cycle, or ~15 fps per video — which is why `VIDEO_DISPLAY_FPS` costs nothing at that count and `⏩ Skip Frames` starts to earn its place.
 
----
-
-## GPU Memory: Why N Fresh Models Doesn't Cost N× VRAM
-
-`load_fresh_model()` calls `YOLO(path)` with the **same file path** each time. PyTorch's weight-sharing means:
-
-- The underlying `nn.Module` parameters are loaded from the `.pt` file once and **reference-counted** in VRAM.
-- Each model object has its own **tracker state** (CPU-side Kalman buffers, track dictionaries) — typically a few MB.
-- The GPU holds one copy of the CNN weights regardless of how many Python model handles exist.
+Two caveats on the old version of this table. FP16 is **not** enabled anywhere in this app — `quantize=16` is available on `predict()` but nothing passes it, so all of the above is FP32. And `verbose` was left at its default until recently, which cost **2.18 ms/frame — 19% of inference** — formatting log lines nobody reads.
 
 ---
 
 ## End-to-End Frame Processing Sequence
 
 ```
-cv2.VideoCapture.read()          ← CPU — decode next video frame
-cv2.resize()                     ← CPU — scale to 720 px wide
-model.track() / model.predict()  ← GPU — YOLO26 inference + NMS
-_annotate_with_ids()             ← CPU — draw boxes + labels
-_draw_overlay()                  ← CPU — stats overlay
-cv2.imencode(".jpg")             ← CPU — JPEG compress
-placeholder.image(bytes)         ← Streamlit — DOM patch to browser
+cv2.VideoCapture.read()          CPU   decode next video frame        0.23 ms
+_display_size() + cv2.resize()   CPU   downscale only, never up       0.01 ms
+model.track(verbose=False)       GPU   YOLO26 inference + tracking   10.86 ms
+_annotate_with_ids()             CPU   boxes, labels, track IDs       0.85 ms
+_draw_overlay()                  CPU   stats overlay                  0.26 ms
+cv2.imencode(".jpg", q=75)       CPU   only for painted frames        0.62 ms
+placeholder.image(bytes)         NET   1 ForwardMsg + 1 browser GET
+_gc_media_files()                      every 30 painted frames        2.1 ms
 ```
 
-CPU steps are fast enough that GPU is the bottleneck, so adding more videos costs only the marginal GPU time per extra inference call — **not** additional Python or IO overhead.
+GPU inference is 84% of the frame, so adding more videos costs mainly the marginal inference time per extra call. What it *also* costs — and what this document previously missed — is one more media-manager entry and one more browser GET per painted frame, which is why the display cap is per-video.
 
 ---
 
@@ -190,9 +182,22 @@ CPU steps are fast enough that GPU is the bottleneck, so adding more videos cost
 
 | Setting | File | Default | Effect |
 |---|---|---|---|
-| `VIDEO_DISPLAY_WIDTH` | `config.py` | `720` | Resize target before inference |
+| `VIDEO_DISPLAY_FPS` | `config.py` | `30.0` | Paint-rate ceiling **per video**; `0` disables. Does not affect detection |
+| `VIDEO_DISPLAY_WIDTH` | `config.py` | `720` | **Ceiling** on inference width; never upscales |
+| `VIDEO_JPEG_QUALITY` | `config.py` | `75` | 82 KB/frame at q90 → 49 KB at q75, no visible loss |
+| `METRICS_REFRESH_HZ` | `config.py` | `5.0` | Sidebar repaint rate |
+| `MEDIA_GC_EVERY_N_FRAMES` | `config.py` | `30` | Frame-JPEG collection interval |
 | `DEFAULT_SKIP_FRAMES` | `config.py` | `1` | Process every frame |
 | `MAX_SKIP_FRAMES` | `config.py` | `8` | Max frames to skip |
-| `JPEG_QUALITY` | `video_service.py` | `90` | Output image quality |
 | `_COLS_PER_ROW` | `video_service.py` | `3` | Grid columns per row |
-| Tracker | sidebar | `bytetrack.yaml` | ByteTrack or BoTSORT |
+| Tracker | sidebar | `bytetrack.yaml` | ByteTrack / BoTSORT / Deep OC-SORT / TrackTrack |
+
+### Choosing N
+
+| Videos | Recommended | Why |
+|---|---|---|
+| 2–3 | `yolo26n`/`s`, skip=1 | ~30 fps per video, VRAM under 100 MB |
+| 4–6 | `yolo26n`, skip=1–2 | round-robin cycle approaches 65 ms; display cap already binding |
+| 6+ | `yolo26n`, skip=2+, narrow `🎯 Limit to classes` | GPU is the constraint; every dropped class is free throughput |
+
+Never use `yolo26x` for multi-video: 241 MB of VRAM **per video**.
