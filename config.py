@@ -127,6 +127,10 @@ def get_videos_dict() -> dict[str, Path]:
 # Kept for backward compat — but prefer get_videos_dict()
 VIDEOS_DICT = get_videos_dict()
 
+# Preselected in the stored-video picker when present (else the first one). Older clips live in
+# videos/archive/, which the picker doesn't scan; sources and licences: videos/ATTRIBUTION.md.
+DEFAULT_VIDEO = "pedestrians_summer_street"
+
 # ─── Inference Defaults ──────────────────────────────────────────────────────
 DEFAULT_CONFIDENCE = 0.40
 DEFAULT_IOU = 0.50

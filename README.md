@@ -101,27 +101,28 @@
 - GPU recommended (NVIDIA CUDA) for real-time video inference
 - Webcam (optional, for live detection)
 
+### Installation with uv (recommended)
 
-### uv istallation 
+[uv](https://docs.astral.sh/uv/) installs the exact versions in `uv.lock`, on Linux, macOS and Windows. Thanks to [@AmirMahdiRezaeiEECS](https://github.com/AmirMahdiRezaeiEECS) for contributing this setup ([#19](https://github.com/aparsoft/yolo-streamlit-detection-tracking/pull/19)).
 
 ```bash
 # Clone the repository
-git clone https://github.com/AmirMahdiRezaeiEECS/YOLO-Vision-Studio.git
-cd YOLO-Vision-Studio
+git clone https://github.com/aparsoft/yolo-streamlit-detection-tracking.git
+cd yolo-streamlit-detection-tracking
 
-# install uv once (if needed)
+# Install uv once (if needed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# create .venv + install exact locked deps
+# Create .venv and install the locked dependencies
 uv sync
 
-# optional CUDA extras
-# uv sync --extra cuda
-
+# Run the app
 uv run streamlit run app.py
 ```
 
-### Pip installation (CUDA error for Mac)
+On Linux, PyTorch from PyPI already includes CUDA. On Windows, for a CUDA build, install PyTorch from [pytorch.org](https://pytorch.org/get-started/locally/) into the environment first.
+
+### Installation with pip
 
 ```bash
 # 1. Clone the repository
@@ -201,9 +202,13 @@ The app opens at **http://localhost:8501**.
 6. For **YOLO World v2** / **YOLOE**: enter the prompts to search for in the video
 7. Click **🚀 Detect** — local and global metrics appear in the sidebar; **⏹ Stop** ends it early
 
+### Sample Videos
+
+Nine short clips ship in `videos/`: street crossings, traffic, a red car, a person in red, dogs and bikes, and two pose scenes. They are from [Pexels](https://www.pexels.com/license/), credited in [`videos/ATTRIBUTION.md`](videos/ATTRIBUTION.md), and were picked by running this app's own detector and tracker over 731 candidates. Older clips live in `videos/archive/`.
+
 ### Adding Your Own Videos
 
-Drop `.mp4` files into the `videos/` directory. They appear automatically in the stored-video dropdown — no code changes required (the config scans the folder at startup).
+Drop `.mp4` (or `.avi`, `.mkv`, `.mov`, `.webm`) files into the `videos/` directory. They appear in the stored-video dropdown on the next rerun, with no code changes (the folder is scanned every time).
 
 ---
 

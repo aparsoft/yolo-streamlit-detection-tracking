@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import tempfile
+import threading
 import time
 from collections import Counter, defaultdict
 from contextlib import nullcontext
@@ -26,6 +27,7 @@ import numpy as np
 import streamlit as st
 import yaml
 import yt_dlp
+from ultralytics.trackers.basetrack import BaseTrack
 from ultralytics.utils import YAML
 
 import config
@@ -58,6 +60,11 @@ _TRACK_COLORS = [
     (192, 57, 43),  # pomegranate
     (127, 140, 141),  # asbestos
 ]
+
+
+# Guards the process-wide track-ID counter while one model's tracker updates (see _infer).
+_TRACK_ID_LOCK = threading.Lock()
+_ID_COUNTER_ATTR = "_studio_track_id_count"
 
 
 def _color_for_track(track_id: int) -> tuple[int, int, int]:
@@ -407,6 +414,7 @@ def _reset_trackers(model) -> None:
     predictor = getattr(model, "predictor", None)
     if predictor is not None and hasattr(predictor, "trackers"):
         del predictor.trackers
+    setattr(model, _ID_COUNTER_ATTR, 0)  # this model's own ID counter (see _infer)
 
     owned = (ul_track.on_predict_start, ul_track.on_predict_postprocess_end)
     tables = [getattr(model, "callbacks", None), getattr(predictor, "callbacks", None)]
@@ -563,14 +571,25 @@ def _infer(
         # verbose=False matters here: Ultralytics logs one formatted line per call, which
         # costs 2.18 ms/frame — 19% of a 11.7 ms inference — and floods the terminal.
         if enable_tracking and tracker:
-            results = model.track(
-                frame,
-                conf=confidence,
-                persist=True,
-                tracker=tracker,
-                classes=track_classes,
-                verbose=False,
-            )
+            # Track IDs come from ONE counter for the whole process (BaseTrack._count),
+            # and every new tracker resets it to 0. With two trackers alive (multi-video,
+            # or two visitors) their IDs interleaved, inflating churn, and a tracker
+            # created mid-run reset the counter under the other one, which then reissued
+            # IDs it already had: two objects merged into one count. So each model keeps
+            # its own counter, swapped in and out around its own update.
+            with _TRACK_ID_LOCK:
+                BaseTrack._count = getattr(model, _ID_COUNTER_ATTR, 0)
+                try:
+                    results = model.track(
+                        frame,
+                        conf=confidence,
+                        persist=True,
+                        tracker=tracker,
+                        classes=track_classes,
+                        verbose=False,
+                    )
+                finally:
+                    setattr(model, _ID_COUNTER_ATTR, BaseTrack._count)
         else:
             results = model.predict(
                 frame, conf=confidence, classes=track_classes, verbose=False
@@ -1085,10 +1104,11 @@ def _play_stored_video(
         st.warning("No videos found in the `videos/` directory.")
         return
 
+    names = list(videos.keys())
     vid_names = st.sidebar.multiselect(
         "Choose video(s)",
-        list(videos.keys()),
-        default=[list(videos.keys())[0]],
+        names,
+        default=[config.DEFAULT_VIDEO if config.DEFAULT_VIDEO in videos else names[0]],
         help="Select multiple videos for simultaneous detection.",
     )
 
