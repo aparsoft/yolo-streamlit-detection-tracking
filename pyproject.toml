@@ -1,34 +1,23 @@
 [project]
 name = "yolo-streamlit-detection-tracking"
 version = "2.1.0"
-description = "Real-time Object Detection · Segmentation · Pose Estimation · Tracking with YOLO26, YOLO World v2 & Streamlit"
+description = "YOLO Vision Studio: detection, segmentation, pose, open-vocabulary prompts and tracking with YOLO26, YOLOE, YOLO World v2, RT-DETR and Streamlit"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
+# Keep in step with requirements.txt (pip users) — same packages, same lower bounds.
 dependencies = [
-    "streamlit>=1.40",
-    "streamlit-webrtc>=0.60",
-    "ultralytics>=8.3",
-    "torch>=2.2",
-    "torchvision>=0.17",
-    "opencv-python>=4.8",
-    "pillow>=10.0",
-    "numpy>=1.26",
+    "ultralytics>=8.4.116",     # YOLO26, YOLOE-26, RT-DETR, YOLO World v2 and the trackers (brings torch, torchvision, opencv)
+    "streamlit>=1.50",
+    "streamlit-webrtc>=0.64.5", # browser webcam
+    "av>=14",
     "pandas>=2.0",
+    "pillow>=10.0",
     "pyyaml>=6.0",
-    "yt-dlp>=2024.0",
-    "supervision>=0.22",
-    "lapx>=0.5",
-    "onnxruntime>=1.17",  # CPU build — works everywhere
-    "clip @ git+https://github.com/ultralytics/CLIP.git",
-]
-
-[project.optional-dependencies]
-cuda = [
-    # Only meaningful on Linux / Windows with NVIDIA
-    "cuda-bindings>=12.9; sys_platform == 'linux' or sys_platform == 'win32'",
-    "cuda-pathfinder>=1.3; sys_platform == 'linux' or sys_platform == 'win32'",
-    "onnxruntime-gpu>=1.17; sys_platform == 'linux' or sys_platform == 'win32'",
+    "yt-dlp>=2026.2.4",         # YouTube source
+    "lapx>=0.5.12",             # linear assignment for the trackers
+    "onnxruntime>=1.20",        # only for the yolo26*-reid.onnx ReID encoders; CPU build, works everywhere
+    "clip @ git+https://github.com/ultralytics/CLIP.git",  # YOLO World v2 text encoder
 ]
 
 [tool.uv]
-package = false  # application project — install deps only, not the project as a package
+package = false  # application project: install the dependencies only, not the project as a package
