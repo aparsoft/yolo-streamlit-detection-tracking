@@ -4,7 +4,6 @@ All paths, model configs, UI settings, and constants are defined here.
 """
 
 from pathlib import Path
-import os
 import sys
 
 # ─── Paths ───────────────────────────────────────────────────────────────────

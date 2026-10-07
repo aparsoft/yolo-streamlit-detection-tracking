@@ -6,12 +6,15 @@ Provides a single ``render()`` entry-point called from *app.py*.
 
 from __future__ import annotations
 
+import hashlib
+
 import PIL.Image
+import PIL.ImageOps
 import pandas as pd
 import streamlit as st
 
 import config
-from model_loader import get_model_for_task
+from model_loader import SHARED_MODEL_LOCK, get_model_for_task
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
@@ -41,29 +44,46 @@ def render(task: str, confidence: float, selected_model: str | None = None) -> N
         key="img_upload",
     )
 
+    # The default image is a real input, not a picture of an input: Run works on it too,
+    # for every task. (It used to show a pre-rendered detection result instead — the
+    # same boxes under Pose, Segmentation or a YOLO World prompt.)
+    if uploaded:
+        image_bytes = uploaded.getvalue()
+        caption = "Original Image"
+    elif config.DEFAULT_IMAGE.exists():
+        image_bytes = config.DEFAULT_IMAGE.read_bytes()
+        caption = "Default Image — upload your own above"
+    else:
+        st.info("Upload an image to begin.")
+        return
+    image = _open_image(image_bytes)
+
+    # A result belongs to one exact (image, task, model, prompt, confidence). It is kept
+    # in the session so it survives reruns — before, nudging any widget erased it.
+    run_key = hashlib.md5(
+        image_bytes + repr((task, selected_model, world_classes, confidence)).encode()
+    ).hexdigest()
+
     col1, col2 = st.columns(2)
 
     with col1:
-        if uploaded:
-            image = PIL.Image.open(uploaded)
-            st.image(image, caption="Original Image", width="stretch")
-        elif config.DEFAULT_IMAGE.exists():
-            st.image(
-                str(config.DEFAULT_IMAGE),
-                caption="Default Image",
-                width="stretch",
-            )
+        st.image(image, caption=caption, width="stretch")
 
     with col2:
-        if uploaded:
-            if st.button(f"🚀 Run {task}", type="primary", width="stretch"):
-                _run_inference(model, image, confidence, task)
-        elif config.DEFAULT_DETECT_IMAGE.exists():
-            st.image(
-                str(config.DEFAULT_DETECT_IMAGE),
-                caption="Detected Image",
-                width="stretch",
-            )
+        if st.button(f"🚀 Run {task}", type="primary", width="stretch"):
+            with st.spinner(f"Running {task}…"):
+                st.session_state["_image_result"] = (
+                    run_key,
+                    _predict(model, image, confidence),
+                )
+        saved = st.session_state.get("_image_result")
+        if saved and saved[0] == run_key:
+            result = saved[1]
+            annotated = result.plot()[:, :, ::-1]  # BGR → RGB
+            st.image(annotated, caption=f"{task} Result", width="stretch")
+            _display_results(result, task)
+        else:
+            st.info(f"Press **Run {task}** to see the result here.")
 
 
 # ── YOLOE helpers ─────────────────────────────────────────────────────────────
@@ -120,15 +140,23 @@ def _world_class_input() -> list[str] | None:
 # ── Inference logic ───────────────────────────────────────────────────────────
 
 
-def _run_inference(model, image: PIL.Image.Image, confidence: float, task: str) -> None:
-    with st.spinner(f"Running {task}…"):
-        results = model.predict(image, conf=confidence)
-        result = results[0]
+def _open_image(data: bytes) -> PIL.Image.Image:
+    """Decode an image the way it is meant to be seen.
 
-        annotated = result.plot()[:, :, ::-1]  # BGR → RGB
-        st.image(annotated, caption=f"{task} Result", width="stretch")
+    Phone photos store their rotation in EXIF instead of in the pixels; without the
+    transpose a portrait shot was shown — and detected — lying on its side. RGB because
+    PNGs with transparency or a palette otherwise reach the model in an odd mode.
+    """
+    import io
 
-    _display_results(result, task)
+    img = PIL.Image.open(io.BytesIO(data))
+    return PIL.ImageOps.exif_transpose(img).convert("RGB")
+
+
+def _predict(model, image: PIL.Image.Image, confidence: float):
+    """One prediction on the shared cached model (under its lock; see model_loader)."""
+    with SHARED_MODEL_LOCK:
+        return model.predict(image, conf=confidence, verbose=False)[0]
 
 
 def _display_results(result, task: str) -> None:

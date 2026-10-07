@@ -3,6 +3,9 @@ Centralized model loading with Streamlit caching.
 Models are loaded once and reused across reruns.
 """
 
+import threading
+import warnings
+
 import torch
 import streamlit as st
 from ultralytics import YOLO, YOLOWorld, YOLOE
@@ -11,6 +14,20 @@ import config
 
 # Reuse weights already in weights/ instead of re-downloading them into the CWD.
 config.use_local_weights_dir()
+
+# ``@st.cache_resource`` models are shared by every browser session, and each session's
+# script runs on its own thread. An Ultralytics predictor is not thread-safe (its
+# dataset, batch and tracker state live on the object), so two visitors running at once
+# could interleave inside one ``predict()``. Inference on a shared model takes this lock;
+# session-owned models (see ``get_session_model``) don't need it.
+SHARED_MODEL_LOCK = threading.RLock()
+
+# Set on models that belong to one session / one video, so callers can skip the lock.
+_OWNED_ATTR = "_studio_session_owned"
+
+
+def is_session_owned(model) -> bool:
+    return bool(getattr(model, _OWNED_ATTR, False))
 
 
 @st.cache_resource
@@ -93,8 +110,10 @@ def _ensure_device(model) -> None:
         if hasattr(model, "model") and hasattr(model.model, "to"):
             model.model.to(device)
         model.to(device)
-    except Exception:
-        pass
+    except Exception as exc:
+        # Not fatal — Ultralytics places the model itself at predict time — but a silent
+        # ``pass`` here once hid a CPU/CUDA mismatch for a whole debugging session.
+        warnings.warn(f"Could not move model to {device}: {exc}", RuntimeWarning)
 
 
 def _set_world_classes(model: YOLOWorld, classes: list[str]) -> None:
@@ -211,3 +230,36 @@ def load_fresh_model(
     m = YOLO(path)
     config.sweep_stray_weights()
     return m
+
+
+def get_session_model(
+    task: str,
+    world_classes: list[str] | None = None,
+    model_name: str | None = None,
+) -> YOLO | YOLOWorld | YOLOE:
+    """A model owned by **this browser session** — used for tracking.
+
+    Tracker state (``persist=True``) lives on the model's predictor. On the shared
+    ``@st.cache_resource`` model that state was shared by every visitor: two people
+    playing videos at once fed one tracker, and one run's end-of-video reset wiped the
+    other's IDs mid-stream. A session-owned copy isolates all of it.
+
+    Only one is kept per session (each is a full copy of the weights); switching model,
+    task or prompt replaces it.
+    """
+    store: dict = st.session_state.setdefault("_session_models", {})
+    key = (task, model_name, tuple(world_classes or ()))
+    model = store.get(key)
+    if model is None:
+        store.clear()
+        model = load_fresh_model(task, world_classes, model_name=model_name)
+        _ensure_device(model)
+        setattr(model, _OWNED_ATTR, True)
+        store[key] = model
+    return model
+
+
+def mark_session_owned(model):
+    """Flag a model that no other session can reach (e.g. multi-video's per-video copies)."""
+    setattr(model, _OWNED_ATTR, True)
+    return model

@@ -3,21 +3,29 @@
 # 🔬 YOLO Vision Studio
 
 **Real-time Object Detection · Segmentation · Pose Estimation · Tracking**
-**Powered by YOLO26, YOLO World v2 & Streamlit**
+**Powered by YOLO26, YOLOE, YOLO World v2, RT-DETR & Streamlit**
 
-[![Stars](https://img.shields.io/github/stars/CodingMantras/yolov8-streamlit-detection-tracking?style=for-the-badge&logo=github)](https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/stargazers)
-[![Python](https://img.shields.io/badge/Python-3.9+-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.40+-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io)
-[![Ultralytics](https://img.shields.io/badge/Ultralytics-8.3+-purple?style=for-the-badge)](https://ultralytics.com)
-[![License](https://img.shields.io/github/license/aparsoft/yolov8-streamlit-detection-tracking?style=for-the-badge)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/aparsoft/yolo-streamlit-detection-tracking?style=for-the-badge&logo=github)](https://github.com/aparsoft/yolo-streamlit-detection-tracking/stargazers)
+[![Python](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.50+-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io)
+[![Ultralytics](https://img.shields.io/badge/Ultralytics-8.4+-purple?style=for-the-badge)](https://ultralytics.com)
+[![License](https://img.shields.io/github/license/aparsoft/yolo-streamlit-detection-tracking?style=for-the-badge)](LICENSE)
 
-[Live Demo](https://yolov8-object-detection-and-tracking-app.streamlit.app/) · [Blog Series](https://rs-punia.medium.com/building-a-real-time-object-detection-and-tracking-app-with-yolov8-and-streamlit-part-1-30c56f5eb956) · [Report Bug](https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/issues)
+[Live Demo](https://yolov8-object-detection-and-tracking-app.streamlit.app/) · [Blog Series](https://rs-punia.medium.com/building-a-real-time-object-detection-and-tracking-app-with-yolov8-and-streamlit-part-1-30c56f5eb956) · [Report Bug](https://github.com/aparsoft/yolo-streamlit-detection-tracking/issues)
 
 </div>
 
 ---
 
-## 🆕 What's New in v2.0
+## 🆕 What's New in v2.1
+
+- **More models, one selector**: every YOLO26 size (nano → xlarge) per task, **RT-DETR** (transformer) for detection, and **YOLOE** for text-prompted detection *with masks*.
+- **Four trackers**: ByteTrack, BoT-SORT, Deep OC-SORT and TrackTrack, with optional **appearance ReID** and sidebar-tunable gates.
+- **Honest counts**: an object counts once it has been tracked for 5 frames, and a *churn* figure shows when the tracker is fragmenting IDs.
+- **Limit to classes**, **multi-video** side-by-side runs, and a **⏹ Stop** button.
+- **Fixes**: identical runs now give identical counts (a reset used to stack tracker callbacks, so every run after the first was counted differently and ran slower); each browser session gets its own tracking model, so two visitors never share a tracker; the default image runs every task; phone photos keep their orientation; `requirements.txt` installs on Windows and macOS.
+
+## What's New in v2.0
 
 > **Thank you for 400+ ⭐ stars!** This major update brings a completely rewritten, modular codebase with exciting new capabilities.
 
@@ -42,23 +50,29 @@
 ### 📷 Image Inference
 - **Object Detection** — Detect 80+ COCO classes with YOLO26 (NMS-free, edge-optimized)
 - **YOLO World v2 (Text Prompt)** — Natural language prompts like *"person in black"*, *"red car"*, *"laptop on table"* for open-vocabulary detection
+- **YOLOE (Text → Segmentation)** — Category-level prompts (*person, car, laptop*) with instance masks
+- **RT-DETR** — Transformer detector, selectable alongside every YOLO26 size
 - **Instance Segmentation** — Pixel-level object segmentation with multi-scale proto modules
 - **Pose Estimation** — Human body keypoint and skeleton detection with RLE precision
 - Per-class metrics, confidence scores and detailed results table
+- Works on the bundled default image straight away: no upload needed to try a task
 
 ### 🎬 Video Inference
 - **Multiple Sources**: Stored videos, Webcam (browser-native via WebRTC), RTSP streams, YouTube URLs
-- **Real-time Tracking**: ByteTrack and BoTSORT algorithms (enabled by default)
+- **Real-time Tracking**: ByteTrack, BoT-SORT, Deep OC-SORT and TrackTrack (enabled by default), with optional appearance ReID
+- **Limit to Classes**: track only the classes you care about (cheaper, and cleaner counts)
+- **Multi-Video**: pick several stored videos and run them side by side, each with its own tracker
 - **Local + Global Counting**: Per-frame counts (green) and cumulative unique-object counts (yellow) displayed on every frame
 - **Skip Frames**: Adjustable 1–8× slider for faster inference on long or high-FPS videos
 - **YOLO World v2 in Video**: Natural language text-prompt search in video streams
 - **Live Metrics**: Separate local (this frame) and global (cumulative) sections in sidebar
-- **Count Overlay**: Two-line on-frame badge — local in green, global in yellow
+- **Count Overlay**: On-frame badge — local in green, global in yellow, track quality (churn) in grey
+- **⏹ Stop**: ends a playback and keeps the counts so far
 
 ### 🏗️ Architecture
 - **Modular Design**: Separate services for image and video inference
 - **Centralized Config**: Single `config.py` for all settings
-- **Cached Models**: `@st.cache_resource` for instant model reuse
+- **Cached Models**: `@st.cache_resource` for instant model reuse; tracking runs get a session-owned model so visitors never share tracker state
 - **Clean Routing**: Task + Mode based dispatch in `app.py`
 
 ---
@@ -75,7 +89,7 @@
 
 | Home Page | Detection Result | Segmentation |
 |:---------:|:----------------:|:------------:|
-| <img src="https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/blob/master/assets/pic1.png" width="300"> | <img src="https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/blob/master/assets/pic3.png" width="300"> | <img src="https://github.com/CodingMantras/yolov8-streamlit-detection-tracking/blob/master/assets/segmentation.png" width="300"> |
+| <img src="assets/pic1.png" width="300"> | <img src="assets/pic3.png" width="300"> | <img src="assets/segmentation.png" width="300"> |
 
 ---
 
@@ -83,7 +97,7 @@
 
 ### Prerequisites
 
-- Python 3.9 or higher
+- Python 3.10 or higher (tested on 3.12)
 - GPU recommended (NVIDIA CUDA) for real-time video inference
 - Webcam (optional, for live detection)
 
@@ -91,8 +105,8 @@
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/CodingMantras/yolov8-streamlit-detection-tracking.git
-cd yolov8-streamlit-detection-tracking
+git clone https://github.com/aparsoft/yolo-streamlit-detection-tracking.git
+cd yolo-streamlit-detection-tracking
 
 # 2. Create a virtual environment
 python -m venv venv
@@ -102,6 +116,8 @@ source venv/bin/activate        # Linux / macOS
 # 3. Install dependencies
 pip install -r requirements.txt
 ```
+
+`requirements.txt` works on Linux, Windows and macOS. `requirements-lock.txt` pins the exact Linux + CUDA 12.8 environment the app was developed and tested in. For a specific CUDA build of PyTorch, install it first from [pytorch.org](https://pytorch.org/get-started/locally/).
 
 ### Download Model Weights
 
@@ -139,17 +155,19 @@ The app opens at **http://localhost:8501**.
 
 1. **Inference Mode** — Choose between 📷 *Image Inference* or 🎬 *Video Inference*
 2. **Task** — Select one of:
-   - **Object Detection** — Standard YOLO26 object detection (NMS-free, end-to-end)
+   - **Detection** — YOLO26 (NMS-free, end-to-end) or RT-DETR
    - **Segmentation** — Instance segmentation with pixel masks
    - **YOLO World v2 (Text Prompt)** — Open-vocabulary detection with natural language prompts
+   - **YOLOE (Text → Segmentation)** — Open-vocabulary detection + masks from category names
    - **Pose Estimation** — Human body keypoint detection
-3. **Model Confidence** — Adjust the confidence threshold (10–100%)
+3. **🧠 Model** — Pick the model size (nano is fastest; xlarge is most accurate)
+4. **Model Confidence** — Adjust the confidence threshold (10–100%)
 
 ### Image Inference
 
 1. Select **📷 Image Inference** mode
-2. Choose a task (Detection, Segmentation, YOLO World, or Pose)
-3. Upload an image or use the default
+2. Choose a task (Detection, Segmentation, YOLO World, YOLOE or Pose)
+3. Upload an image, or run on the default one
 4. For **YOLO World v2**: type descriptive phrases (e.g., `person in black, red car, laptop on table`)
 5. Click **🚀 Run** to see results with per-class metrics
 
@@ -158,10 +176,10 @@ The app opens at **http://localhost:8501**.
 1. Select **🎬 Video Inference** mode
 2. Choose a task
 3. Pick a video source: **Stored Video**, **Webcam**, **RTSP**, or **YouTube**
-4. **Object Tracking** is enabled by default (ByteTrack or BoTSORT) — local + global counts display automatically
-5. Adjust **Skip Frames** (1–8) in the sidebar for faster inference on long videos
-6. For **YOLO World v2**: enter natural language prompts to search for in the video
-7. Click **🚀 Detect** — local and global metrics appear in the sidebar
+4. **Object Tracking** is enabled by default (ByteTrack, BoT-SORT, Deep OC-SORT or TrackTrack; ReID optional) — local + global counts display automatically
+5. Optionally **🎯 Limit to classes**, and adjust **Skip Frames** (1–8) for faster inference on long videos
+6. For **YOLO World v2** / **YOLOE**: enter the prompts to search for in the video
+7. Click **🚀 Detect** — local and global metrics appear in the sidebar; **⏹ Stop** ends it early
 
 ### Adding Your Own Videos
 
@@ -172,19 +190,20 @@ Drop `.mp4` files into the `videos/` directory. They appear automatically in the
 ## 🗂️ Project Structure
 
 ```
-yolov8-streamlit-detection-tracking/
+yolo-streamlit-detection-tracking/
 ├── app.py                # Main Streamlit application & routing
 ├── config.py             # Centralized configuration (paths, models, UI)
 ├── model_loader.py       # Model loading with @st.cache_resource
 ├── image_service.py      # Image inference (detection, segmentation, world, pose)
 ├── video_service.py      # Video inference (tracking, counting, all sources)
-├── requirements.txt      # Python dependencies
+├── requirements.txt      # Python dependencies (any OS)
+├── requirements-lock.txt # exact Linux + CUDA environment
 ├── packages.txt          # System packages for Streamlit Cloud
 ├── README.md
 ├── assets/               # Screenshots and demo media
 ├── images/               # Sample images
 ├── videos/               # Sample videos (add your .mp4 files here)
-└── weights/              # Model weights (yolov8n.pt, yolov8n-seg.pt, ...)
+└── weights/              # Model weights (yolo26n.pt, yolo26n-seg.pt, ...; auto-downloaded)
 ```
 
 ### Module Responsibilities
@@ -219,7 +238,7 @@ VIDEO_DISPLAY_WIDTH = 720
 DEFAULT_SKIP_FRAMES = 1   # process every frame (1–8)
 
 # YOLO World v2 default prompts
-DEFAULT_WORLD_CLASSES = "person in black, red car, dog, laptop on table"
+DEFAULT_WORLD_CLASSES = "person, car, dog, cat, chair, table, laptop, phone"
 ```
 
 ### Custom Models
@@ -278,7 +297,9 @@ Contributions are welcome! Here's how:
 
 ## 📄 License
 
-This project is open-source and available for educational and research purposes.
+This project's code is released under the [Apache License 2.0](LICENSE).
+
+The models it runs come from [Ultralytics](https://github.com/ultralytics/ultralytics), which is licensed under **AGPL-3.0** (with an Ultralytics Enterprise License for closed-source commercial use). Check those terms before you ship a product built on them.
 
 ## 🙏 Acknowledgements
 

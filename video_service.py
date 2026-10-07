@@ -18,6 +18,7 @@ import hashlib
 import tempfile
 import time
 from collections import Counter, defaultdict
+from contextlib import nullcontext
 from pathlib import Path
 
 import cv2
@@ -28,7 +29,14 @@ import yt_dlp
 from ultralytics.utils import YAML
 
 import config
-from model_loader import get_model_for_task, load_fresh_model
+from model_loader import (
+    SHARED_MODEL_LOCK,
+    get_model_for_task,
+    get_session_model,
+    is_session_owned,
+    load_fresh_model,
+    mark_session_owned,
+)
 
 # ── Track-ID colour palette (16 distinct BGR colours) ────────────────────────
 
@@ -249,6 +257,15 @@ def render(task: str, confidence: float, selected_model: str | None = None) -> N
     # Tracking options (enabled by default)
     enable_tracking, tracker = _tracker_options()
 
+    # Tracker state lives on the model, so tracking needs a model no other browser
+    # session can touch. Plain detection keeps using the shared cached one.
+    if enable_tracking:
+        try:
+            model = get_session_model(task, world_classes, model_name=selected_model)
+        except Exception as exc:
+            st.error(f"❌ Failed to load model for **{task}**: {exc}")
+            return
+
     # Trackers are built once and cached along with the model, so a changed tracker or
     # a changed ReID setting only takes effect if we drop the existing ones.
     if st.session_state.get("_active_tracker") != tracker:
@@ -374,12 +391,32 @@ def _reset_trackers(model) -> None:
 
     Tracker objects are created once in ``on_predict_start`` and reused for as long as
     ``persist=True``, so a changed YAML — or a different tracker entirely — is otherwise
-    silently ignored. Our models are ``@st.cache_resource``d, so they survive every
-    Streamlit rerun and would keep the tracker chosen on the very first run forever.
+    silently ignored. Our models outlive every Streamlit rerun, so they would keep the
+    tracker chosen on the very first run forever.
+
+    Deleting ``predictor.trackers`` alone is not enough: ``Model.track()`` re-registers
+    its two tracker callbacks whenever that attribute is missing, *without* removing the
+    old ones. Each reset therefore stacked another set, and from the second run on every
+    frame went through the tracker two, three, four times. Measured on
+    ``people_crossing_2``: 19 confirmed objects on the first run, 5 on every run after
+    it, and each run slower than the last. So the old callbacks go too, and every run
+    starts exactly like the first.
     """
+    from ultralytics.trackers import track as ul_track
+
     predictor = getattr(model, "predictor", None)
     if predictor is not None and hasattr(predictor, "trackers"):
         del predictor.trackers
+
+    owned = (ul_track.on_predict_start, ul_track.on_predict_postprocess_end)
+    tables = [getattr(model, "callbacks", None), getattr(predictor, "callbacks", None)]
+    for table in {id(t): t for t in tables if t}.values():  # usually the same dict
+        for event in ("on_predict_start", "on_predict_postprocess_end"):
+            if event in table:
+                # In place: the predictor may hold a reference to the same list.
+                table[event][:] = [
+                    cb for cb in table[event] if getattr(cb, "func", cb) not in owned
+                ]
 
 
 def _tracker_defaults(tracker_yaml: str) -> dict:
@@ -508,6 +545,39 @@ def _track_quality(track_hits: Counter) -> tuple[float, int]:
     return round(max(track_hits) / len(track_hits), 2), len(_confirmed(track_hits))
 
 
+def _infer(
+    model,
+    frame: np.ndarray,
+    confidence: float,
+    enable_tracking: bool,
+    tracker: str | None,
+    track_classes: list[int] | None,
+):
+    """One ``track()`` or ``predict()`` call; returns the single result.
+
+    A model shared between sessions is used under ``SHARED_MODEL_LOCK`` (see
+    model_loader); a session-owned one needs no lock.
+    """
+    lock = nullcontext() if is_session_owned(model) else SHARED_MODEL_LOCK
+    with lock:
+        # verbose=False matters here: Ultralytics logs one formatted line per call, which
+        # costs 2.18 ms/frame — 19% of a 11.7 ms inference — and floods the terminal.
+        if enable_tracking and tracker:
+            results = model.track(
+                frame,
+                conf=confidence,
+                persist=True,
+                tracker=tracker,
+                classes=track_classes,
+                verbose=False,
+            )
+        else:
+            results = model.predict(
+                frame, conf=confidence, classes=track_classes, verbose=False
+            )
+    return results[0]
+
+
 def _process_frame(
     model,
     frame: np.ndarray,
@@ -530,23 +600,7 @@ def _process_frame(
     if (w, h) != frame.shape[1::-1]:
         frame = cv2.resize(frame, (w, h))
 
-    # verbose=False matters here: Ultralytics logs one formatted line per call, which
-    # costs 2.18 ms/frame — 19% of a 11.7 ms inference — and floods the terminal.
-    if enable_tracking and tracker:
-        results = model.track(
-            frame,
-            conf=confidence,
-            persist=True,
-            tracker=tracker,
-            classes=track_classes,
-            verbose=False,
-        )
-    else:
-        results = model.predict(
-            frame, conf=confidence, classes=track_classes, verbose=False
-        )
-
-    result = results[0]
+    result = _infer(model, frame, confidence, enable_tracking, tracker, track_classes)
     frame_obj_count = 0
     frame_class_counts: dict[str, int] = {}
 
@@ -725,6 +779,22 @@ class _LiveMetrics:
             )
 
 
+def _stop_button() -> None:
+    """A Stop control for a running playback.
+
+    The loop runs inside the script thread, so no widget can *call into* it. It does not
+    need to: clicking any widget asks Streamlit for a rerun, and the running script is
+    interrupted at its next ``st.*`` call — which the loop makes every frame. The button
+    exists so people know that, instead of reloading the tab. Its ``finally`` blocks
+    still run, so captures are released and trackers reset.
+    """
+    st.sidebar.button(
+        "⏹ Stop",
+        key="stop_video",
+        help="Stops the playback (the frame on screen and the counts so far stay).",
+    )
+
+
 # ── Single-video capture loop ────────────────────────────────────────────────
 
 
@@ -742,6 +812,7 @@ def _run_video_loop(
         st.error("❌ Could not open video source.")
         return
 
+    _stop_button()
     metrics = _LiveMetrics(enable_tracking)
     st_frame = st.empty()
     track_hits: Counter = Counter()  # track_id -> frames seen
@@ -875,11 +946,15 @@ def _run_multi_video_loop(
     n = len(vid_names)
     _COLS_PER_ROW = 3
 
-    # Fresh model per video — tracking state isolation
+    # Fresh model per video — tracking state isolation (and no other session can reach
+    # them, so they skip the shared-model lock)
     models = [
-        load_fresh_model(task, world_classes, model_name=selected_model)
+        mark_session_owned(
+            load_fresh_model(task, world_classes, model_name=selected_model)
+        )
         for _ in range(n)
     ]
+    _stop_button()
 
     # Build placeholders in a 3-per-row grid
     placeholders: list[st.delta_generator.DeltaGenerator] = []
@@ -912,6 +987,9 @@ def _run_multi_video_loop(
     processed_total = 0
     # One cap per video: n videos sharing one would let a fast clip starve a slow one.
     throttles = [_DisplayThrottle() for _ in range(n)]
+    # The newest frame each video inferred but did not paint, so no video ends on a
+    # stale picture (the single-video loop does the same).
+    pending: list[np.ndarray | None] = [None] * n
 
     try:
         while any(active):
@@ -940,10 +1018,13 @@ def _run_multi_video_loop(
                     track_classes,
                 )
 
+                processed_total += 1
                 now = time.monotonic()
                 if throttles[i].ready(now):
                     placeholders[i].image(_frame_to_bytes(annotated), width="stretch")
-                    processed_total += 1
+                    pending[i] = None
+                else:
+                    pending[i] = annotated
 
                 inst = 1.0 / max(now - prev_times[i], 1e-6)
                 fps_list[i] = (
@@ -960,10 +1041,15 @@ def _run_multi_video_loop(
                         f"{fps_list[i]:.1f} FPS"
                     )
 
-                # n videos fill the media manager n× faster than one does.
+                # n videos fill the media manager n× faster than one does. The counter
+                # counts every inferred frame: counting only *painted* ones left it parked
+                # on a multiple of N between paints, and the collector ran every frame.
                 if processed_total % config.MEDIA_GC_EVERY_N_FRAMES == 0:
                     _gc_media_files()
     finally:
+        for i, frame in enumerate(pending):
+            if frame is not None:
+                placeholders[i].image(_frame_to_bytes(frame), width="stretch")
         for cap in captures:
             cap.release()
         _gc_media_files()
@@ -1073,13 +1159,17 @@ def _play_webcam(
         "Your browser will ask for camera permission — please allow it."
     )
 
-    track_hits_global: Counter = Counter()
-    class_hits_global: dict[str, Counter] = defaultdict(Counter)
-
     class YOLOVideoProcessor(VideoProcessorBase):
+        # One processor per START. Its counters live on the instance: they used to be
+        # closure variables of the script run, so their lifetime had nothing to do with
+        # the webcam session, and the tracker kept counting IDs from the previous START.
         def __init__(self):
             self.frame_count = 0
             self.last_annotated = None
+            self.track_hits: Counter = Counter()
+            self.class_hits: dict[str, Counter] = defaultdict(Counter)
+            if enable_tracking:
+                _reset_trackers(model)  # IDs start from 1 on every START
 
         def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
             img = frame.to_ndarray(format="bgr24")
@@ -1093,52 +1183,17 @@ def _play_webcam(
                     )
                 return frame
 
-            w, h = _display_size(img)
-            if (w, h) != img.shape[1::-1]:
-                img = cv2.resize(img, (w, h))
-
-            if enable_tracking and tracker:
-                results = model.track(
-                    img,
-                    conf=confidence,
-                    persist=True,
-                    tracker=tracker,
-                    classes=track_classes,
-                    verbose=False,
-                )
-            else:
-                results = model.predict(
-                    img, conf=confidence, classes=track_classes, verbose=False
-                )
-
-            result = results[0]
-            frame_class_counts: dict[str, int] = {}
-
-            if result.boxes is not None and len(result.boxes):
-                names = result.names
-                classes = result.boxes.cls.cpu().numpy()
-
-                for cls_id in classes:
-                    name = names[int(cls_id)]
-                    frame_class_counts[name] = frame_class_counts.get(name, 0) + 1
-
-                if enable_tracking and result.boxes.id is not None:
-                    ids = result.boxes.id.cpu().numpy()
-                    for track_id, cls_id in zip(ids, classes):
-                        track_hits_global[int(track_id)] += 1
-                        name = names[int(cls_id)]
-                        class_hits_global.setdefault(name, Counter())[
-                            int(track_id)
-                        ] += 1
-
-            annotated = _annotate_with_ids(img, result, enable_tracking)
-            annotated = _draw_overlay(
-                annotated,
-                len(result.boxes) if result.boxes is not None else 0,
-                frame_class_counts,
-                len(_confirmed(track_hits_global)) if enable_tracking else None,
-                class_hits_global if enable_tracking else None,
-                _track_quality(track_hits_global) if enable_tracking else None,
+            # The same per-frame path as files, RTSP and YouTube: resize, infer (under
+            # the shared-model lock when needed), count, annotate, overlay.
+            annotated, _, _ = _process_frame(
+                model,
+                img,
+                confidence,
+                enable_tracking,
+                tracker,
+                self.track_hits,
+                self.class_hits,
+                track_classes,
             )
             self.last_annotated = annotated
             return av.VideoFrame.from_ndarray(annotated, format="bgr24")
@@ -1217,7 +1272,14 @@ def _play_youtube(
 
 
 def _get_youtube_stream(youtube_url: str) -> str:
-    ydl_opts = {"format": "best[ext=mp4]", "no_warnings": True, "quiet": True}
+    # A progressive MP4 when there is one (OpenCV reads it directly); otherwise the best
+    # video-only MP4, then anything with video. YouTube keeps thinning out progressive
+    # formats, and "best[ext=mp4]" alone fails outright when none is offered.
+    ydl_opts = {
+        "format": "best[ext=mp4][vcodec!=none]/bestvideo[ext=mp4]/best[vcodec!=none]",
+        "no_warnings": True,
+        "quiet": True,
+    }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(youtube_url, download=False)
         return info["url"]
