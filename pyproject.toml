@@ -1,0 +1,34 @@
+[project]
+name = "yolo-streamlit-detection-tracking"
+version = "2.1.0"
+description = "Real-time Object Detection · Segmentation · Pose Estimation · Tracking with YOLO26, YOLO World v2 & Streamlit"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "streamlit>=1.40",
+    "streamlit-webrtc>=0.60",
+    "ultralytics>=8.3",
+    "torch>=2.2",
+    "torchvision>=0.17",
+    "opencv-python>=4.8",
+    "pillow>=10.0",
+    "numpy>=1.26",
+    "pandas>=2.0",
+    "pyyaml>=6.0",
+    "yt-dlp>=2024.0",
+    "supervision>=0.22",
+    "lapx>=0.5",
+    "onnxruntime>=1.17",  # CPU build — works everywhere
+    "clip @ git+https://github.com/ultralytics/CLIP.git",
+]
+
+[project.optional-dependencies]
+cuda = [
+    # Only meaningful on Linux / Windows with NVIDIA
+    "cuda-bindings>=12.9; sys_platform == 'linux' or sys_platform == 'win32'",
+    "cuda-pathfinder>=1.3; sys_platform == 'linux' or sys_platform == 'win32'",
+    "onnxruntime-gpu>=1.17; sys_platform == 'linux' or sys_platform == 'win32'",
+]
+
+[tool.uv]
+package = false  # application project — install deps only, not the project as a package

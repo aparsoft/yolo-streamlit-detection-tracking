@@ -101,7 +101,27 @@
 - GPU recommended (NVIDIA CUDA) for real-time video inference
 - Webcam (optional, for live detection)
 
-### Installation
+
+### uv istallation 
+
+```bash
+# Clone the repository
+git clone https://github.com/AmirMahdiRezaeiEECS/YOLO-Vision-Studio.git
+cd YOLO-Vision-Studio
+
+# install uv once (if needed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# create .venv + install exact locked deps
+uv sync
+
+# optional CUDA extras
+# uv sync --extra cuda
+
+uv run streamlit run app.py
+```
+
+### Pip installation (CUDA error for Mac)
 
 ```bash
 # 1. Clone the repository
