@@ -158,3 +158,9 @@ auto_commit.py
 rf-detr-src/
 requirements_all.txt
 **/port_long_beach_satellite.jpg
+
+# Sample videos live on the "sample-videos" GitHub release (python scripts/get_sample_videos.py);
+# only the default clip and the docs are in git
+videos/*
+!videos/pedestrians_summer_street.mp4
+!videos/ATTRIBUTION.md

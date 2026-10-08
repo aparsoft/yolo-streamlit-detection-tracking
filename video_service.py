@@ -1101,8 +1101,13 @@ def _play_stored_video(
     videos = config.get_videos_dict()
 
     if not videos:
-        st.warning("No videos found in the `videos/` directory.")
+        st.warning(
+            "No videos found in `videos/`. Get the sample clips with "
+            "`python scripts/get_sample_videos.py`, or drop your own .mp4 files there."
+        )
         return
+    if len(videos) == 1:
+        st.sidebar.caption("More sample clips: `python scripts/get_sample_videos.py`")
 
     names = list(videos.keys())
     vid_names = st.sidebar.multiselect(

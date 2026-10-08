@@ -107,7 +107,6 @@ YOLOE_MODEL = "yoloe-26l-seg.pt"
 
 # ─── Default Assets ──────────────────────────────────────────────────────────
 DEFAULT_IMAGE = IMAGES_DIR / "office_4.jpg"
-DEFAULT_DETECT_IMAGE = IMAGES_DIR / "office_4_detected.jpg"
 
 # ─── Video Catalog ───────────────────────────────────────────────────────────
 _VIDEO_EXTENSIONS = ("*.mp4", "*.avi", "*.mkv", "*.mov", "*.wmv", "*.webm")
@@ -127,8 +126,8 @@ def get_videos_dict() -> dict[str, Path]:
 # Kept for backward compat — but prefer get_videos_dict()
 VIDEOS_DICT = get_videos_dict()
 
-# Preselected in the stored-video picker when present (else the first one). Older clips live in
-# videos/archive/, which the picker doesn't scan; sources and licences: videos/ATTRIBUTION.md.
+# Preselected in the stored-video picker when present (else the first one). The only clip kept in git; the
+# others come from the sample-videos release (scripts/get_sample_videos.py). Sources and licences: videos/ATTRIBUTION.md.
 DEFAULT_VIDEO = "pedestrians_summer_street"
 
 # ─── Inference Defaults ──────────────────────────────────────────────────────

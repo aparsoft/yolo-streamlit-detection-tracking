@@ -4,7 +4,7 @@ The original three Wikimedia URLs in this file were guesses and all returned 404
 verified (checked with the Commons API), and the default one is the only candidate of the six
 I tried that a DOTA model actually reads well — see the note on nadir vs oblique below.
 
-    ./venv/bin/python docs/obb_images.py
+    uv run python docs/obb_images.py
 
 Images land in ``images/`` with a filename the notebook's resolver recognises (`ship`,
 `container`, `port`, `harbor`, `aerial`, `satellite`).

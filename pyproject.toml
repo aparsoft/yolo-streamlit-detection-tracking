@@ -21,3 +21,9 @@ dependencies = [
 
 [tool.uv]
 package = false  # application project: install the dependencies only, not the project as a package
+
+[dependency-groups]
+# installed by a plain `uv sync`: run the playground notebook (docs/) and the tests
+dev = ["ipykernel>=6.29", "pytest>=8"]
+# opt-in, for local RF-DETR experiments: `uv sync --group rfdetr` (doesn't change any of the app's versions)
+rfdetr = ["rfdetr>=1.4.2", "supervision>=0.27"]

@@ -21,4 +21,6 @@ track IDs, where people are small enough that faces aren't the subject.
 | `stretching_from_above.mp4` | Pose estimation, seen from above | [Cheerleaders Stretching Together](https://www.pexels.com/video/cheerleaders-stretching-together-7894189/) | MART PRODUCTION | Pexels |
 | `busy_intersection.mp4` | Paths crossing: ReID trackers, multi-video | [Busy City Intersection with Pedestrians Crossing](https://www.pexels.com/video/busy-city-intersection-with-pedestrians-crossing-33865608/) | SHOX ART | Pexels |
 
-Older clips are in `archive/`, which the app's video picker doesn't scan.
+Only `pedestrians_summer_street.mp4` is kept in git. The others are on the
+[sample-videos release](https://github.com/aparsoft/yolo-streamlit-detection-tracking/releases/tag/sample-videos):
+`python scripts/get_sample_videos.py` downloads them and checks each file's SHA-256.
