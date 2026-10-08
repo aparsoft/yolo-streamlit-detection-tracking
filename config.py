@@ -26,7 +26,7 @@ APP_ICON = "🔬"
 APP_VERSION = "2.1.0"
 APP_DESCRIPTION = (
     "Real-time Object Detection, Segmentation, Pose Estimation & Tracking "
-    "powered by YOLO26, YOLO World v2, RT-DETR & Streamlit"
+    "powered by YOLO26, YOLOE, YOLO World v2, RT-DETR & Streamlit"
 )
 
 # ─── Inference Modes ─────────────────────────────────────────────────────────
@@ -214,7 +214,8 @@ GMC_METHOD = "none"  # camera-motion compensation; "sparseOptFlow" if the camera
 MIN_TRACK_HITS = 5
 
 # ─── YOLO World v2 Defaults ───────────────────────────────────────────────────
-# Supports natural language prompts like "person in black", "red car", etc.
+# Plain-language prompts. Measured Oct 2026: object + attribute ("red car" 0.83-0.91) works well;
+# descriptions of people ("person in red" <= 0.34) often fall under the default confidence.
 DEFAULT_WORLD_CLASSES = "person, car, dog, cat, chair, table, laptop, phone"
 
 # ─── YOLOE Defaults ──────────────────────────────────────────────────────────

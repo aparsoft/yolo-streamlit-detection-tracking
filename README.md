@@ -49,7 +49,7 @@
 
 ### 📷 Image Inference
 - **Object Detection** — Detect 80+ COCO classes with YOLO26 (NMS-free, edge-optimized)
-- **YOLO World v2 (Text Prompt)** — Natural language prompts like *"person in black"*, *"red car"*, *"laptop on table"* for open-vocabulary detection
+- **YOLO World v2 (Text Prompt)** — Plain-language prompts like *"red car"*, *"dog"*, *"laptop on table"* for open-vocabulary detection (one object with one attribute works best; descriptions of people are less reliable)
 - **YOLOE (Text → Segmentation)** — Category-level prompts (*person, car, laptop*) with instance masks
 - **RT-DETR** — Transformer detector, selectable alongside every YOLO26 size
 - **Instance Segmentation** — Pixel-level object segmentation with multi-scale proto modules
@@ -189,7 +189,7 @@ The app opens at **http://localhost:8501**.
 1. Select **📷 Image Inference** mode
 2. Choose a task (Detection, Segmentation, YOLO World, YOLOE or Pose)
 3. Upload an image, or run on the default one
-4. For **YOLO World v2**: type descriptive phrases (e.g., `person in black, red car, laptop on table`)
+4. For **YOLO World v2**: type what to look for (e.g., `red car, dog, laptop on table`)
 5. Click **🚀 Run** to see results with per-class metrics
 
 ### Video Inference

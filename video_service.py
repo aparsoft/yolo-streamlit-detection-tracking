@@ -342,8 +342,8 @@ def _yoloe_class_input() -> list[str] | None:
 
 def _world_class_input() -> list[str] | None:
     st.markdown(
-        "💡 **Tip**: YOLO World v2 supports natural language! "
-        "Try `person in black`, `red car`, `man with backpack`."
+        "💡 **Tip**: YOLO World v2 takes plain-language prompts. "
+        "Objects with one attribute work best: `red car`, `dog`, `wooden chair`. Descriptions of people (*person in black*) are less reliable; if one finds nothing, lower the confidence."
     )
     text = st.text_area(
         "🔍 Enter object classes or descriptions to search in video (comma-separated)",
