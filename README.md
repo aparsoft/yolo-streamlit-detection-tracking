@@ -54,7 +54,7 @@ people (`person in black`) score low; if a prompt finds nothing, lower the confi
 ## 🚀 Quick start
 
 **With [uv](https://docs.astral.sh/uv/) (recommended):** installs the exact versions in `uv.lock` on Linux, macOS and
-Windows. Thanks to [@AmirMahdiRezaeiEECS](https://github.com/AmirMahdiRezaeiEECS) for contributing this setup ([#19](https://github.com/aparsoft/yolo-streamlit-detection-tracking/pull/19)).
+Windows.
 
 ```bash
 git clone https://github.com/aparsoft/yolo-streamlit-detection-tracking.git
@@ -169,7 +169,6 @@ creators ([credits](videos/ATTRIBUTION.md)).
 
 - [Ultralytics](https://github.com/ultralytics/ultralytics) for YOLO26, YOLOE, YOLO World and RT-DETR
 - [Streamlit](https://github.com/streamlit/streamlit) and [streamlit-webrtc](https://github.com/whitphx/streamlit-webrtc)
-- [@AmirMahdiRezaeiEECS](https://github.com/AmirMahdiRezaeiEECS) for the uv setup, and everyone who opened an issue
 - The Pexels creators whose clips make the demos, and all 400+ stargazers ⭐
 
 <div align="center">
