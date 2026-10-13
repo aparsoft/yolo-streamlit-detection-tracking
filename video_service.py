@@ -544,9 +544,13 @@ def _confirmed(track_hits: Counter, min_hits: int = config.MIN_TRACK_HITS) -> se
 def _track_quality(track_hits: Counter) -> tuple[float, int]:
     """Return ``(churn, stable_tracks)``.
 
-    ``churn = max_id / unique_ids``. 1.0 is perfect. 2.5 means the tracker issued two
-    and a half IDs for every object it actually followed — fragmentation, which is
-    exactly what appearance ReID is there to fix. Watch it while tuning the sliders.
+    ``churn = max_id / unique_ids``: IDs the tracker opened ÷ IDs it showed. The tracker
+    spends an ID on every candidate track (``STrack.activate``) but returns only confirmed
+    ones, so candidates that die unconfirmed raise the highest ID without ever appearing
+    here. 1.0 means no ID was wasted; a high value means many short-lived candidates
+    (flicker, occlusion, borderline detections). A track that breaks and re-registers adds
+    one to both numbers, so it barely moves churn — it shows up as more IDs shown than
+    objects confirmed.
     """
     if not track_hits:
         return 0.0, 0
@@ -793,7 +797,7 @@ class _LiveMetrics:
             )
             self._global_classes_ph.markdown(global_str or "—")
             self._quality_ph.markdown(
-                f"Churn **{churn}** · IDs issued **{len(track_hits)}** · "
+                f"Churn **{churn}** · IDs shown **{len(track_hits)}** · "
                 f"counted after **{config.MIN_TRACK_HITS}** frames"
             )
 
@@ -934,9 +938,9 @@ def _run_video_loop(
             for idx, (name, hits) in enumerate(class_hits.items()):
                 cols[idx % len(cols)].metric(name.capitalize(), len(_confirmed(hits)))
             st.caption(
-                f"{len(track_hits)} IDs issued, {stable} confirmed · churn {churn} "
-                "(1.0 = every ID followed one object; higher means tracks broke and "
-                "re-registered — try a ReID tracker)."
+                f"{len(track_hits)} IDs shown, {stable} confirmed · churn {churn} "
+                "(IDs opened ÷ IDs shown; 1.0 = no ID was wasted on a candidate that "
+                "never got confirmed)."
             )
     else:
         st.success(f"✅ {' · '.join(summary_parts)}")
